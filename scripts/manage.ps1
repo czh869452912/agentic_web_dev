@@ -63,6 +63,25 @@ function Initialize-Dirs {
     if (-not (Test-Path $sslDir)) { New-Item -ItemType Directory -Path $sslDir -Force | Out-Null }
 }
 
+# ---- 从源文件动态读取基础镜像版本（唯一来源） ----
+function Get-BaseImages {
+    $composeFile  = Join-Path $DockerDir "docker-compose.yml"
+    $csDockerfile = Join-Path $DockerDir "Dockerfile.code-server"
+    $emDockerfile = Join-Path $DockerDir "Dockerfile.embedded"
+
+    $composeLines = Get-Content $composeFile
+
+    # docker-compose.yml 中直接引用的镜像
+    $nginxImg = ($composeLines | Select-String "image:\s*(nginx\S+)"    ).Matches[0].Groups[1].Value
+    $fbImg    = ($composeLines | Select-String "image:\s*(filebrowser\S+)").Matches[0].Groups[1].Value
+
+    # Dockerfile 中的 FROM 行（第一行）
+    $csImg = ((Get-Content $csDockerfile | Select-String "^FROM\s+(\S+)")[0]).Matches[0].Groups[1].Value
+    $emImg = ((Get-Content $emDockerfile | Select-String "^FROM\s+(\S+)")[0]).Matches[0].Groups[1].Value
+
+    return @($nginxImg, $csImg, $fbImg, $emImg)
+}
+
 # ---- 命令函数 ----
 
 function Invoke-Init {
@@ -157,8 +176,7 @@ function Invoke-Build {
 function Invoke-Pull {
     Assert-Docker
     Write-Info "拉取基础镜像..."
-    @("nginx:alpine","codercom/code-server:4.21.0","filebrowser/filebrowser:v2.27.0",
-      "ubuntu:22.04") | ForEach-Object {
+    Get-BaseImages | ForEach-Object {
         Write-Info "  拉取 $_"
         docker pull $_
     }
@@ -234,8 +252,7 @@ function Invoke-Save {
     Assert-Docker
     $imgDir = Join-Path $ProjectRoot "images"
     New-Item -ItemType Directory -Path $imgDir -Force | Out-Null
-    @("nginx:alpine","codercom/code-server:4.21.0","filebrowser/filebrowser:v2.27.0",
-      "code-server-custom:latest","embedded-dev-env:latest") | ForEach-Object {
+    @(Get-BaseImages) + @("code-server-custom:latest","embedded-dev-env:latest") | ForEach-Object {
         $fname = ($_ -replace "[:/]","_") + ".tar"
         $fpath = Join-Path $imgDir $fname
         Write-Info "  保存 $_ -> $fname"
