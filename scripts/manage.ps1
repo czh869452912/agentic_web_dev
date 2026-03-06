@@ -1,5 +1,5 @@
 # ============================================================
-# Agentic 开发环境管理脚�?(Windows PowerShell)
+# Agentic 开发环境管理脚本 (Windows PowerShell)
 # 用法: .\scripts\manage.ps1 <命令>
 # ============================================================
 
@@ -26,7 +26,7 @@ function Write-OK    { param($msg) Write-Host "[ OK ]  $msg" -ForegroundColor Gr
 function Write-Warn  { param($msg) Write-Host "[WARN]  $msg" -ForegroundColor Yellow }
 function Write-Fail  { param($msg) Write-Host "[FAIL]  $msg" -ForegroundColor Red }
 
-# ---- Docker 命令检测（兼容 v1/v2�?---
+# ---- Docker 命令检测（兼容 v1/v2）----
 function Get-DockerCompose {
     $savedEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     docker compose version 2>&1 | Out-Null
@@ -34,13 +34,13 @@ function Get-DockerCompose {
     $ErrorActionPreference = $savedEAP
     if ($exit1 -eq 0) { return "docker compose" }
     if (Get-Command docker-compose -ErrorAction SilentlyContinue) { return "docker-compose" }
-    Write-Fail "未找�?docker compose �?docker-compose"
+    Write-Fail "未找到 docker compose 或 docker-compose"
     exit 1
 }
 
 function Assert-Docker {
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-        Write-Fail "未找�?docker，请先安�?Docker Desktop"
+        Write-Fail "未找到 docker，请先安装 Docker Desktop"
         exit 1
     }
     $savedEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
@@ -48,12 +48,12 @@ function Assert-Docker {
     $dockerExit = $LASTEXITCODE
     $ErrorActionPreference = $savedEAP
     if ($dockerExit -ne 0) {
-        Write-Fail "Docker daemon 未运行，请启�?Docker Desktop"
+        Write-Fail "Docker daemon 未运行，请启动 Docker Desktop"
         exit 1
     }
 }
 
-# ---- 初始化目�?----
+# ---- 初始化目录 ----
 function Initialize-Dirs {
     @("images","logs\nginx","workspace") | ForEach-Object {
         $p = Join-Path $ProjectRoot $_
@@ -66,7 +66,7 @@ function Initialize-Dirs {
 # ---- 命令函数 ----
 
 function Invoke-Init {
-    Write-Info "初始化环境配�?.."
+    Write-Info "初始化环境配置..."
     if (Test-Path $EnvFile) {
         $ans = Read-Host ".env 已存在，是否覆盖? (y/N)"
         if ($ans -notmatch "^[Yy]$") { Write-OK "保留现有配置"; return }
@@ -78,22 +78,22 @@ CODE_SERVER_PASSWORD=changeme
 SUDO_PASSWORD=changeme
 
 # ---- Claude Code API ----
-# 方案A: 官方 API  -> �?ANTHROPIC_API_KEY，留�?ANTHROPIC_BASE_URL
-# 方案B: 内网代理  -> 同时填写（代理须实现 Anthropic /v1/messages 协议�?
-# 方案C: 不填，启动后在终端执�?claude 完成交互式登�?
+# 方案A: 官方 API  -> 填写 ANTHROPIC_API_KEY，留空 ANTHROPIC_BASE_URL
+# 方案B: 内网代理  -> 同时填写（代理须实现 Anthropic /v1/messages 协议）
+# 方案C: 不填，启动后在终端执行 claude 完成交互式登录
 ANTHROPIC_API_KEY=
 ANTHROPIC_BASE_URL=
 "@ | Set-Content -Encoding UTF8 $EnvFile
-    Write-OK "配置文件已创�? $EnvFile"
+    Write-OK "配置文件已创建 $EnvFile"
     Write-Warn "请编辑该文件配置 API 后再启动"
 }
 
 function Invoke-GenSSL {
-    Write-Info "生成自签�?SSL 证书..."
+    Write-Info "生成自签名 SSL 证书..."
     $sslDir = Join-Path $ConfigsDir "ssl"
     New-Item -ItemType Directory -Path $sslDir -Force | Out-Null
 
-    # 优先�?openssl（Git for Windows 自带 / WSL�?
+    # 优先用 openssl（Git for Windows 自带 / WSL）
     $opensslCmd = $null
     foreach ($candidate in @("openssl","C:\Program Files\Git\usr\bin\openssl.exe")) {
         if (Get-Command $candidate -ErrorAction SilentlyContinue) {
@@ -102,7 +102,7 @@ function Invoke-GenSSL {
     }
 
     if ($opensslCmd) {
-        # openssl �?stderr 写信息性消息；临时改为 Continue 避免 Stop 误报
+        # openssl 会往 stderr 写信息性消息；临时改为 Continue 避免 Stop 误报
         $savedEAP = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
         & $opensslCmd genrsa -out "$sslDir\server.key" 2048 2>$null
@@ -115,20 +115,20 @@ function Invoke-GenSSL {
         $ErrorActionPreference = $savedEAP
         if ($LASTEXITCODE -ne 0) { Write-Fail "openssl x509 failed (exit $LASTEXITCODE)"; exit 1 }
         Remove-Item "$sslDir\server.csr" -ErrorAction SilentlyContinue
-        Write-OK "SSL 证书已生�? $sslDir"
+        Write-OK "SSL 证书已生成到 $sslDir"
     } else {
-        # 回退：用 PowerShell 内置证书（仅 Windows�?
-        Write-Warn "未找�?openssl，使�?PowerShell New-SelfSignedCertificate..."
+        # 回退：用 PowerShell 内置证书（仅 Windows）
+        Write-Warn "未找到 openssl，使用 PowerShell New-SelfSignedCertificate..."
         $cert = New-SelfSignedCertificate `
             -DnsName "dev-server.local","localhost" `
             -CertStoreLocation "Cert:\LocalMachine\My" `
             -NotAfter (Get-Date).AddYears(1)
 
-        # 导出 PFX -> 再拆分为 PEM（需�?openssl，仅作提示）
+        # 导出 PFX -> 再拆分为 PEM（需要 openssl，仅作提示）
         $pfxPath = "$sslDir\server.pfx"
         $pwd = ConvertTo-SecureString "devenv" -AsPlainText -Force
         Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $pwd | Out-Null
-        Write-Warn "已生�?PFX: $pfxPath"
+        Write-Warn "已生成 PFX: $pfxPath"
         Write-Warn "Please convert to server.key / server.crt manually with openssl, or install Git for Windows and retry"
     }
 }
@@ -221,7 +221,7 @@ function Invoke-Logs {
 function Invoke-Shell {
     Assert-Docker
     if (-not $Arg1) {
-        Write-Fail "请指定服务名，例�? .\scripts\manage.ps1 shell code-server"
+        Write-Fail "请指定服务名，例如: .\scripts\manage.ps1 shell code-server"
         exit 1
     }
     $dc = Get-DockerCompose
@@ -247,7 +247,7 @@ function Invoke-Save {
 function Invoke-Load {
     Assert-Docker
     $imgDir = Join-Path $ProjectRoot "images"
-    if (-not (Test-Path $imgDir)) { Write-Fail "images\\ directory does not exist"; exit 1 }
+    if (-not (Test-Path $imgDir)) { Write-Fail "images\ directory does not exist"; exit 1 }
     Get-ChildItem "$imgDir\*.tar" | ForEach-Object {
         Write-Info "  加载 $($_.Name)"
         docker load -i $_.FullName
@@ -261,17 +261,17 @@ function Show-Help {
 用法: .\scripts\manage.ps1 <命令> [参数]
 
 命令:
-  init          初始�?.env 配置文件
-  ssl           生成自签�?SSL 证书
+  init          初始化 .env 配置文件
+  ssl           生成自签名 SSL 证书
   pull          拉取基础镜像
-  build         构建自定义镜�?
-  up            启动所有服务（自动生成 SSL�?
-  down          停止所有服�?
-  status        查看服务状�?
+  build         构建自定义镜像
+  up            启动所有服务（自动生成 SSL）
+  down          停止所有服务
+  status        查看服务状态
   logs [svc]    查看日志（可指定服务名）
-  shell <svc>   进入服务 shell（code-server / embedded-dev�?
-  save          保存镜像�?images\
-  load          �?images\ 加载镜像
+  shell <svc>   进入服务 shell（code-server / embedded-dev）
+  save          保存镜像到 images\
+  load          从 images\ 加载镜像
 
 示例:
   .\scripts\manage.ps1 init
@@ -282,8 +282,8 @@ function Show-Help {
 "@
 }
 
-# ---- 主入�?----
-Write-Host "=== Agentic 开发环�?(Windows) ===" -ForegroundColor Blue
+# ---- 主入口 ----
+Write-Host "=== Agentic 开发环境 (Windows) ===" -ForegroundColor Blue
 
 switch ($Command.ToLower()) {
     "init"   { Initialize-Dirs; Invoke-Init; break }
