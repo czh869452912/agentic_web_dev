@@ -33,8 +33,11 @@
 
 | 服务 | 地址 |
 |------|------|
-| VS Code Web | https://server:8443/ |
-| 文件管理 | https://server:8443/files/ |
+| VS Code Web | https://localhost:8443/ |
+| 文件管理 | https://localhost:8443/files/ |
+| 健康检查 | https://localhost:8443/health |
+
+> 使用自签名证书，浏览器会提示不安全，点击"高级 → 继续访问"即可。
 
 ---
 
@@ -48,33 +51,47 @@ ANTHROPIC_API_KEY=sk-ant-api03-...
 ANTHROPIC_API_KEY=your-key
 ANTHROPIC_BASE_URL=http://10.0.0.100:8000
 
-# 不填则启动后交互式登录（运行 claude 命令）
+# 不填则启动后交互式登录（在 VS Code 终端运行 claude 命令）
 ```
 
 ---
 
 ## Claude Code 用法（在 VS Code 终端中运行）
 
+> Claude Code 以 CLI 形式集成，在 VS Code 内置终端直接使用。
+
 ```bash
-# 启动交互式会话
+# 首次使用：交互式登录
 claude
 
-# 编辑文件
+# 启动对话
+claude
+
+# 直接处理单个文件
 claude src/main.c
 
 # 查看/修改配置
 claude config get
-claude config set model claude-opus-4-5
+claude config set model claude-sonnet-4-6
+
+# 验证安装
+claude --version
 ```
 
 ---
 
 ## 嵌入式开发工具速查
 
+> 以下命令在 **code-server 终端**中直接可用（已配置 PATH 和别名）。
+
 ```bash
-# ARM 编译
+# ARM bare-metal 编译（arm-none-eabi-gcc 13.2）
 arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb -o fw.elf main.c
 arm-gcc main.c          # 别名
+
+# ARM Linux 交叉编译
+arm-linux-gnueabihf-gcc -o app main.c
+aarch64-linux-gnu-gcc -o app main.c
 
 # 代码格式化
 clang-format -i *.c
@@ -96,9 +113,30 @@ cov                     # 别名
 # ELF 分析
 arm-none-eabi-size firmware.elf
 arm-size firmware.elf   # 别名
+arm-none-eabi-objdump -d firmware.elf
+arm-objdump firmware.elf  # 别名
 
 # 文档生成
 doxygen Doxyfile
+
+# probe-rs（嵌入式调试/烧录，Rust工具链）
+probe-rs list           # 列出连接的调试器
+probe-rs download --chip STM32F4 firmware.elf
+```
+
+---
+
+## 访问 embedded-dev 容器（重型工具）
+
+embedded-dev 容器运行完整工具链（QEMU、OpenOCD、Rust 等），与 code-server 共享 `/workspace`。
+
+```bash
+# 从宿主机进入
+docker exec -it embedded-dev bash
+
+# 或通过 manage 脚本
+./scripts/manage.sh shell embedded-dev   # Linux
+.\scripts\manage.ps1 shell embedded-dev  # Windows
 ```
 
 ---
@@ -107,10 +145,28 @@ doxygen Doxyfile
 
 | 类别 | 扩展 |
 |------|------|
-| AI | `anthropic.claude-code`, `saoudrizwan.claude-dev` |
-| C/C++ | `ms-vscode.cpptools-extension-pack`, `marus25.cortex-debug` |
-| 嵌入式 | `dan-c-underwood.arm`, `zixuanwang.linkerscript` |
-| 质量 | `jbenden.c-cpp-flylint`, `xaver.clang-format`, `notskm.clang-tidy` |
-| 构建 | `ms-vscode.cmake-tools`, `twxs.cmake` |
-| Git | `eamodio.gitlens`, `mhutchie.git-graph` |
-| 生产力 | `usernamehw.errorlens`, `christian-kohler.path-intellisense` |
+| AI | `saoudrizwan.claude-dev`（Cline，可调用 Claude API） |
+| 嵌入式调试 | `marus25.cortex-debug` |
+| ARM 汇编 | `dan-c-underwood.arm` |
+| 链接脚本 | `zixuanwang.linkerscript` |
+| 代码检查 | `jbenden.c-cpp-flylint`、`notskm.clang-tidy` |
+| 格式化 | `xaver.clang-format` |
+| 文档 | `cschlosser.doxdocgen` |
+| 构建 | `ms-vscode.cmake-tools`、`twxs.cmake` |
+| Git | `eamodio.gitlens`、`mhutchie.git-graph` |
+| 生产力 | `usernamehw.errorlens`、`christian-kohler.path-intellisense`、`pkief.material-icon-theme` |
+
+> **注意**：`anthropic.claude-code` 官方扩展与当前 code-server 版本不兼容，Claude Code 通过 CLI（`claude` 命令）使用。
+
+---
+
+## 常见问题
+
+**Q: 浏览器显示"无法连接到服务器 (WebSocket 1006)"**
+A: nginx 需要使用 `$http_host`（含端口）转发 Host 头，否则 code-server CSRF 检查会拒绝 WebSocket 升级。当前配置已修复此问题，若重新部署请确保 `configs/nginx.conf` 中 code-server 代理块使用 `proxy_set_header Host $http_host;`。
+
+**Q: 构建时 apt-get 出现网络错误**
+A: 国内环境下 `archive.ubuntu.com` 可能无法访问。Dockerfile 已切换至阿里云镜像（HTTP），如仍失败可改用 `http://mirrors.tuna.tsinghua.edu.cn/ubuntu`。
+
+**Q: 如何离线安装 VS Code 扩展（.vsix）**
+A: 将 `.vsix` 文件放入 `configs/vsix/` 目录，重新构建镜像后自动安装。
