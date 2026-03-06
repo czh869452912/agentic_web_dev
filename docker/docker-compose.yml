@@ -1,11 +1,11 @@
 # ============================================================
 # 内网 Agentic 云开发环境 - Docker Compose 配置
-# 接入内网 OpenAI 兼容 API（非本地部署）
+# 架构：Nginx 网关 → code-server（内置 Claude Code）→ 嵌入式工具链
 # ============================================================
 
 services:
   # ==========================================================
-  # 1. 网关层：Nginx 反向代理（唯一对外端口）
+  # 1. 网关层：Nginx 反向代理（唯一对外端口 8443）
   # ==========================================================
   gateway:
     image: nginx:alpine
@@ -17,26 +17,22 @@ services:
       - ../configs/nginx.conf:/etc/nginx/nginx.conf:ro
       - ../configs/ssl:/etc/nginx/ssl:ro
       - ../logs/nginx:/var/log/nginx
-    environment:
-      - NGINX_ENTRYPOINT_QUIET_LOGS=1
     depends_on:
-      code-server:
-        condition: service_started
-      claude-web:
-        condition: service_started
+      - code-server
+      - filebrowser
     networks:
       devnet:
         aliases:
           - gateway.local
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      test: ["CMD-SHELL", "wget -q --no-check-certificate --spider https://localhost:8443/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
 
   # ==========================================================
-  # 2. Code Server：Web 版 VS Code（预装插件）
+  # 2. Code Server：Web 版 VS Code + Claude Code CLI（核心）
   # ==========================================================
   code-server:
     build:
@@ -47,22 +43,20 @@ services:
     environment:
       - PASSWORD=${CODE_SERVER_PASSWORD:-changeme}
       - SUDO_PASSWORD=${SUDO_PASSWORD:-changeme}
-      - VSCODE_PROXY_URI=https://{{host}}:{{port}}/
-      - DEFAULT_WORKSPACE=/workspace
-      # 内网大模型 API 配置
-      - LLM_API_URL=${LLM_API_URL:-http://internal-llm:8000/v1}
-      - LLM_API_KEY=${LLM_API_KEY:-}
-      - LLM_MODEL=${LLM_MODEL:-gpt-4}
+      # Claude Code API 配置（直接用 Anthropic 官方环境变量）
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
+      # 若使用兼容 Anthropic API 格式的内网代理，设置以上两项
     volumes:
       - ../workspace:/workspace
       - code-extensions:/home/coder/.local/share/code-server/extensions
       - code-config:/home/coder/.config/code-server
+      - claude-config:/home/coder/.claude
     networks:
       devnet:
         aliases:
           - vscode.local
     restart: unless-stopped
-    # 不直接暴露端口，仅通过网关访问
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
       interval: 30s
@@ -70,38 +64,8 @@ services:
       retries: 3
 
   # ==========================================================
-  # 3. Claude Code 服务（连接内网 API）
-  # ==========================================================
-  claude-web:
-    build:
-      context: .
-      dockerfile: Dockerfile.claude
-    container_name: claude-web
-    hostname: claude-web
-    environment:
-      # 内网大模型 API 配置（关键）
-      - ANTHROPIC_BASE_URL=${LLM_API_URL:-http://internal-llm:8000/v1}
-      - ANTHROPIC_API_KEY=${LLM_API_KEY:-}
-      - CLAUDE_CODE_MODEL=${LLM_MODEL:-gpt-4}
-      - WORKSPACE_DIR=/workspace
-      - PORT=3000
-      - HOST=0.0.0.0
-    volumes:
-      - ../workspace:/workspace
-      - claude-config:/root/.claude
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ../configs/claude-config.json:/root/.claude/settings.json:ro
-    networks:
-      devnet:
-        aliases:
-          - claude.local
-    restart: unless-stopped
-    # 如果内网 API 需要特定网络访问，可配置 extra_hosts 或 dns
-    extra_hosts:
-      - "internal-llm:${LLM_HOST_IP:-127.0.0.1}"
-
-  # ==========================================================
-  # 4. 嵌入式开发环境（全工具链）
+  # 3. 嵌入式开发环境（完整工具链，共享工作区）
+  # 通过 docker exec 或 SSH 从 code-server 终端访问
   # ==========================================================
   embedded-dev:
     build:
@@ -112,7 +76,6 @@ services:
     volumes:
       - ../workspace:/workspace
       - dev-toolchains:/opt/toolchains
-      - /dev:/dev
     privileged: true
     networks:
       devnet:
@@ -121,12 +84,12 @@ services:
     working_dir: /workspace
     stdin_open: true
     tty: true
-    command: /bin/bash
+    command: /bin/bash -c "tail -f /dev/null"
     devices:
       - /dev/bus/usb:/dev/bus/usb
 
   # ==========================================================
-  # 5. 文件浏览器
+  # 4. 文件浏览器（通过 /files/ 访问）
   # ==========================================================
   filebrowser:
     image: filebrowser/filebrowser:v2.27.0
@@ -155,12 +118,7 @@ networks:
 
 volumes:
   code-extensions:
-    driver: local
   code-config:
-    driver: local
   claude-config:
-    driver: local
   dev-toolchains:
-    driver: local
   filebrowser-db:
-    driver: local

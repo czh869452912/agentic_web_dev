@@ -51,13 +51,19 @@ usage() {
 }
 
 check_deps() {
-    local deps=("docker" "docker-compose")
-    for dep in "${deps[@]}"; do
-        if ! command -v "$dep" &> /dev/null; then
-            echo -e "${RED}错误: 未找到 $dep，请先安装${NC}"
-            exit 1
-        fi
-    done
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}错误: 未找到 docker，请先安装 Docker${NC}"
+        exit 1
+    fi
+    # 支持 docker compose (v2) 和 docker-compose (v1)
+    if docker compose version &> /dev/null 2>&1; then
+        DOCKER_COMPOSE="docker compose"
+    elif command -v docker-compose &> /dev/null; then
+        DOCKER_COMPOSE="docker-compose"
+    else
+        echo -e "${RED}错误: 未找到 docker compose 或 docker-compose${NC}"
+        exit 1
+    fi
 }
 
 init_dirs() {
@@ -313,18 +319,20 @@ pull_images() {
 
 build_images() {
     echo -e "${YELLOW}构建自定义镜像...${NC}"
-    
-    cd "$DOCKER_DIR"
-    
-    echo -e "${BLUE}[1/3] 构建 Code Server（预装插件版）...${NC}"
-    docker build -f Dockerfile.code-server -t code-server-custom:latest .
-    
-    echo -e "${BLUE}[2/3] 构建 Claude Code 服务...${NC}"
-    docker build -f Dockerfile.claude -t claude-web:latest .
-    
-    echo -e "${BLUE}[3/3] 构建嵌入式开发环境（全工具链）...${NC}"
-    docker build -f Dockerfile.embedded -t embedded-dev-env:latest .
-    
+
+    # code-server context 必须是上级目录（包含 configs/）
+    echo -e "${BLUE}[1/2] 构建 Code Server + Claude Code（一体镜像）...${NC}"
+    docker build \
+        -f "$DOCKER_DIR/Dockerfile.code-server" \
+        -t code-server-custom:latest \
+        "$PROJECT_ROOT"
+
+    echo -e "${BLUE}[2/2] 构建嵌入式开发环境（完整工具链）...${NC}"
+    docker build \
+        -f "$DOCKER_DIR/Dockerfile.embedded" \
+        -t embedded-dev-env:latest \
+        "$DOCKER_DIR"
+
     echo -e "${GREEN}✓ 所有镜像构建完成${NC}"
 }
 
@@ -375,28 +383,31 @@ load_images() {
 
 start_services() {
     echo -e "${YELLOW}启动服务...${NC}"
-    
+
     cd "$DOCKER_DIR"
-    
+
     if [ ! -f .env ]; then
         echo -e "${RED}错误: .env 文件不存在${NC}"
         echo -e "${YELLOW}请运行: $0 init${NC}"
         exit 1
     fi
-    
-    # 检查关键配置
-    source .env
-    if [ -z "$LLM_API_URL" ]; then
-        echo -e "${RED}警告: LLM_API_URL 未配置${NC}"
-        echo -e "${YELLOW}Claude Code 可能无法正常工作${NC}"
-        read -p "是否继续? (y/N): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            exit 1
-        fi
+
+    # 自动生成 SSL 证书（如果不存在）
+    if [ ! -f "$CONFIGS_DIR/ssl/server.crt" ]; then
+        echo -e "${YELLOW}SSL 证书不存在，自动生成...${NC}"
+        gen_ssl
     fi
-    
-    docker-compose up -d
+
+    # 检查 API 配置
+    source .env
+    if [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$ANTHROPIC_BASE_URL" ]; then
+        echo -e "${YELLOW}警告: ANTHROPIC_API_KEY 和 ANTHROPIC_BASE_URL 均未配置${NC}"
+        echo -e "${YELLOW}Claude Code 启动后需要手动运行 'claude' 完成登录${NC}"
+    fi
+
+    mkdir -p "$PROJECT_ROOT/logs/nginx"
+
+    $DOCKER_COMPOSE up -d
     
     echo ""
     echo -e "${GREEN}✓ 服务已启动${NC}"
@@ -412,21 +423,21 @@ start_services() {
 stop_services() {
     echo -e "${YELLOW}停止服务...${NC}"
     cd "$DOCKER_DIR"
-    docker-compose down
+    $DOCKER_COMPOSE down
     echo -e "${GREEN}✓ 服务已停止${NC}"
 }
 
 show_status() {
     cd "$DOCKER_DIR"
-    docker-compose ps
+    $DOCKER_COMPOSE ps
 }
 
 show_logs() {
     cd "$DOCKER_DIR"
     if [ -z "$1" ]; then
-        docker-compose logs -f --tail=100
+        $DOCKER_COMPOSE logs -f --tail=100
     else
-        docker-compose logs -f --tail=100 "$1"
+        $DOCKER_COMPOSE logs -f --tail=100 "$1"
     fi
 }
 
@@ -439,7 +450,7 @@ enter_shell() {
     fi
     
     cd "$DOCKER_DIR"
-    docker-compose exec "$service" /bin/bash
+    $DOCKER_COMPOSE exec "$service" /bin/bash
 }
 
 clean() {
