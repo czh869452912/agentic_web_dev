@@ -12,6 +12,13 @@ LABEL description="Complete embedded software engineering toolchain"
 LABEL version="2.0.0"
 
 # ============================================================
+# 切换到阿里云镜像 + 启用 universe 仓库
+# ============================================================
+RUN sed -i 's|http://archive.ubuntu.com/ubuntu|http://mirrors.aliyun.com/ubuntu|g' /etc/apt/sources.list \
+    && sed -i 's|http://security.ubuntu.com/ubuntu|http://mirrors.aliyun.com/ubuntu|g' /etc/apt/sources.list \
+    && printf '\ndeb http://mirrors.aliyun.com/ubuntu jammy universe\ndeb http://mirrors.aliyun.com/ubuntu jammy-updates universe\ndeb http://mirrors.aliyun.com/ubuntu jammy-backports main restricted universe multiverse\n' >> /etc/apt/sources.list
+
+# ============================================================
 # 系统包：一次性安装所有 apt 依赖，减少网络请求次数
 # ============================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -47,8 +54,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     qemu-user-static qemu-system-arm qemu-system-aarch64 binfmt-support \
     # OpenOCD 和调试器
     openocd stlink-tools libftdi1-dev libhidapi-dev \
-    # 二进制分析和格式化
-    binwalk xxd cloc indent astyle \
+    # 二进制分析
+    vim-common \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
@@ -100,7 +107,7 @@ RUN rustup target add \
     thumbv8m.main-none-eabi \
     aarch64-unknown-none-softfloat
 
-RUN cargo install cargo-embed probe-rs-tools --locked
+RUN cargo install probe-rs-tools --locked
 
 # ============================================================
 # Node.js + Claude Code CLI
