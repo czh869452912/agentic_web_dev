@@ -69,8 +69,8 @@ services:
   # ==========================================================
   embedded-dev:
     build:
-      context: .
-      dockerfile: Dockerfile.embedded
+      context: ..
+      dockerfile: docker/Dockerfile.embedded
     container_name: embedded-dev
     hostname: embedded-dev
     volumes:

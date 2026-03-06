@@ -137,7 +137,7 @@ function Invoke-Build {
     docker build `
         -f "$DockerDir\Dockerfile.embedded" `
         -t "embedded-dev-env:latest" `
-        $DockerDir
+        $ProjectRoot
     if ($LASTEXITCODE -ne 0) { Write-Fail "embedded-dev 镜像构建失败"; exit 1 }
 
     Write-OK "所有镜像构建完成"

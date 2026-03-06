@@ -331,7 +331,7 @@ build_images() {
     docker build \
         -f "$DOCKER_DIR/Dockerfile.embedded" \
         -t embedded-dev-env:latest \
-        "$DOCKER_DIR"
+        "$PROJECT_ROOT"
 
     echo -e "${GREEN}✓ 所有镜像构建完成${NC}"
 }
