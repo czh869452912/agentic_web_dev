@@ -11,7 +11,6 @@ USER root
 # 系统依赖 + 嵌入式开发基础工具
 # ============================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # 基础工具
     curl \
     wget \
     git \
@@ -23,7 +22,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     unzip \
     zip \
-    # C/C++ 开发
     build-essential \
     gdb \
     gdb-multiarch \
@@ -34,31 +32,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     clang-tidy \
     clang-tools \
     llvm \
-    # 静态分析
     cppcheck \
     valgrind \
-    # 代码覆盖率
     lcov \
-    # 文档工具
     doxygen \
     graphviz \
-    # ARM Linux 交叉编译（嵌入式常用）
     gcc-arm-linux-gnueabihf \
     g++-arm-linux-gnueabihf \
     gcc-aarch64-linux-gnu \
     g++-aarch64-linux-gnu \
-    # Python
     python3 \
     python3-pip \
     python3-venv \
-    # 调试辅助
     openocd \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
-# Python 工具（覆盖率报告 + 格式化 + 嵌入式辅助）
+# Python 工具
 # ============================================================
-RUN pip3 install --no-cache-dir \
+RUN pip3 install --no-cache-dir --break-system-packages \
     gcovr \
     pyserial \
     pyelftools \
@@ -87,51 +79,37 @@ RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 Claude Code CLI（全局可用）
 RUN npm install -g @anthropic-ai/claude-code
 
 # ============================================================
-# VS Code 插件安装（以 coder 用户身份）
+# VS Code 插件（以 coder 用户身份）
 # ============================================================
 USER coder
 
-# C/C++ 扩展包
 RUN code-server --install-extension ms-vscode.cpptools-extension-pack
-
-# 嵌入式调试
 RUN code-server --install-extension marus25.cortex-debug
 RUN code-server --install-extension dan-c-underwood.arm
 RUN code-server --install-extension zixuanwang.linkerscript
-
-# 代码质量
 RUN code-server --install-extension jbenden.c-cpp-flylint
 RUN code-server --install-extension xaver.clang-format
 RUN code-server --install-extension notskm.clang-tidy
 RUN code-server --install-extension cschlosser.doxdocgen
-
-# 构建工具
 RUN code-server --install-extension ms-vscode.cmake-tools
 RUN code-server --install-extension twxs.cmake
-
-# Git
 RUN code-server --install-extension eamodio.gitlens
 RUN code-server --install-extension mhutchie.git-graph
-
-# 主题
 RUN code-server --install-extension pkief.material-icon-theme
-
-# 生产力
 RUN code-server --install-extension streetsidesoftware.code-spell-checker
 RUN code-server --install-extension usernamehw.errorlens
 RUN code-server --install-extension christian-kohler.path-intellisense
 
-# Claude Code 官方扩展（在线时自动安装，离线时跳过）
+# Claude Code 官方扩展（在线时安装，离线时跳过）
 RUN code-server --install-extension anthropic.claude-code \
-    || echo "[INFO] Claude Code extension not available from marketplace, use VSIX instead"
+    || echo "[INFO] Claude Code extension not in marketplace, use VSIX instead"
 
-# Cline（开源备选）
+# Cline 备选
 RUN code-server --install-extension saoudrizwan.claude-dev \
-    || echo "[INFO] Cline extension not available, skipping"
+    || echo "[INFO] Cline not available, skipping"
 
 # ============================================================
 # 离线 VSIX 安装（将 .vsix 放在 configs/vsix/ 目录）
@@ -139,13 +117,12 @@ RUN code-server --install-extension saoudrizwan.claude-dev \
 RUN mkdir -p /tmp/vsix
 COPY --chown=coder:coder configs/vsix/ /tmp/vsix/
 RUN if ls /tmp/vsix/*.vsix 1>/dev/null 2>&1; then \
-        echo "[INFO] Installing VSIX extensions..." && \
         for vsix in /tmp/vsix/*.vsix; do \
-            echo "  Installing: $vsix" && \
-            code-server --install-extension "$vsix" || echo "  Failed: $vsix"; \
+            echo "Installing: $vsix" && \
+            code-server --install-extension "$vsix" || echo "Failed: $vsix"; \
         done; \
     else \
-        echo "[INFO] No VSIX files found, skipping offline extension installation"; \
+        echo "[INFO] No VSIX files, skipping offline install"; \
     fi
 
 # ============================================================
@@ -156,64 +133,22 @@ USER root
 # VS Code 工作区默认设置
 COPY --chown=coder:coder configs/settings.json /home/coder/.local/share/code-server/User/settings.json
 
-# 启动脚本：根据环境变量配置 Claude Code，再启动 code-server
-RUN cat > /opt/entrypoint.sh << 'ENTRYPOINT_EOF'
-#!/bin/bash
-set -e
+# 嵌入式工具别名加入 coder 的 bashrc
+RUN printf '\n# ==== Embedded Dev Environment ====\n\
+export PATH="/opt/toolchains/arm-none-eabi/bin:$PATH"\n\
+alias arm-gcc="arm-none-eabi-gcc"\n\
+alias arm-objdump="arm-none-eabi-objdump"\n\
+alias arm-size="arm-none-eabi-size"\n\
+alias cf="clang-format"\n\
+alias ct="clang-tidy"\n\
+alias cppc="cppcheck --enable=all --suppress=missingIncludeSystem"\n\
+alias cov="gcovr -r . --html --html-details -o coverage.html"\n' \
+    >> /home/coder/.bashrc
 
-# ---- 配置 Claude Code ----
-CLAUDE_DIR="/home/coder/.claude"
-mkdir -p "$CLAUDE_DIR"
-chown coder:coder "$CLAUDE_DIR"
-
-if [ -n "$ANTHROPIC_API_KEY" ] || [ -n "$ANTHROPIC_BASE_URL" ]; then
-    cat > "$CLAUDE_DIR/settings.json" << CONFIG_EOF
-{
-  "env": {
-    "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY:-}",
-    "ANTHROPIC_BASE_URL": "${ANTHROPIC_BASE_URL:-}",
-    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "8192"
-  }
-}
-CONFIG_EOF
-    chown coder:coder "$CLAUDE_DIR/settings.json"
-    echo "[entrypoint] Claude Code configured: ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-<default>}"
-else
-    echo "[entrypoint] No API config found, Claude Code will use interactive login"
-fi
-
-# ---- 确保 claude 在 coder 的 PATH 里 ----
-CLAUDE_BIN=$(which claude 2>/dev/null || echo "")
-if [ -n "$CLAUDE_BIN" ]; then
-    echo "[entrypoint] claude CLI found at: $CLAUDE_BIN"
-else
-    echo "[entrypoint] WARNING: claude CLI not found in PATH"
-fi
-
-# ---- 启动 code-server ----
-exec dumb-init /usr/bin/code-server \
-    --bind-addr 0.0.0.0:8080 \
-    --disable-telemetry \
-    --disable-update-check \
-    --auth password \
-    "$@"
-ENTRYPOINT_EOF
-
-RUN chmod +x /opt/entrypoint.sh
-
-# 全局 bashrc：让 coder 用户终端有正确的 PATH 和提示
-RUN cat >> /home/coder/.bashrc << 'BASHRC_EOF'
-
-# ==== Embedded Dev Environment ====
-export PATH="/opt/toolchains/arm-none-eabi/bin:$PATH"
-alias arm-gcc='arm-none-eabi-gcc'
-alias arm-objdump='arm-none-eabi-objdump'
-alias arm-size='arm-none-eabi-size'
-alias cf='clang-format'
-alias ct='clang-tidy'
-alias cppc='cppcheck --enable=all --suppress=missingIncludeSystem'
-alias cov='gcovr -r . --html --html-details -o coverage.html'
-BASHRC_EOF
+# 启动脚本（外部文件，避免 heredoc 解析问题）
+COPY scripts/code-server-entrypoint.sh /opt/entrypoint.sh
+# 修复 Windows CRLF 行尾，确保 shebang 可被 Linux 识别
+RUN sed -i 's/\r$//' /opt/entrypoint.sh && chmod +x /opt/entrypoint.sh
 
 ENV SHELL=/bin/bash
 WORKDIR /workspace
