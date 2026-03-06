@@ -1,0 +1,55 @@
+# Docker 构建忽略文件
+# 减少构建上下文大小，加快构建速度
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# 文档
+*.md
+!README.md
+LICENSE
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 日志
+logs/
+*.log
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+
+# 构建输出
+build/
+dist/
+*.tar.gz
+
+# 工作空间（挂载卷，不需要包含在镜像中）
+workspace/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# Node.js
+node_modules/
+npm-debug.log*
+
+# Docker
+docker/.env
+docker/*.tar

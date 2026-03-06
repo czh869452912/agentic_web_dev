@@ -1,0 +1,94 @@
+# ============================================
+# Agentic Web Dev - Git Ignore
+# ============================================
+
+# Docker构建结果
+*.tar
+*.tar.gz
+docker-images/
+
+# 环境变量文件（包含敏感信息）
+.env
+.env.local
+.env.production
+.secrets/*
+!.secrets/.gitkeep
+
+# 工作空间（用户数据，不应提交）
+workspace/*
+!workspace/.gitkeep
+
+# 日志文件
+logs/
+*.log
+
+# IDE和编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# 操作系统文件
+*.DS_Store
+.AppleDouble
+.LSOverride
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 测试和覆盖率
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+
+# 备份文件
+*.bak
+*.backup
+
+# 证书和密钥
+*.pem
+*.key
+*.crt
+*.csr

@@ -1,0 +1,173 @@
+# ============================================================
+# Code Server 镜像（预装插件版）
+# ============================================================
+
+FROM codercom/code-server:4.21.0
+
+USER root
+
+# 安装系统依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # 基础工具
+    curl \
+    wget \
+    git \
+    git-lfs \
+    vim \
+    nano \
+    htop \
+    tree \
+    jq \
+    # C/C++ 开发
+    build-essential \
+    gdb \
+    gdb-multiarch \
+    cmake \
+    ninja-build \
+    clang \
+    clang-format \
+    clang-tidy \
+    clang-tools \
+    llvm \
+    # 静态分析工具
+    cppcheck \
+    valgrind \
+    # 代码覆盖率
+    lcov \
+    gcovr \
+    # 文档工具
+    doxygen \
+    graphviz \
+    # Python（用于各种工具脚本）
+    python3 \
+    python3-pip \
+    python3-venv \
+    # 其他工具
+    unzip \
+    zip \
+    tar \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装 Python 工具
+RUN pip3 install --no-cache-dir \
+    # 代码格式化
+    autopep8 \
+    black \
+    # 静态检查
+    pylint \
+    flake8 \
+    mypy \
+    # 其他实用工具
+    requests
+
+USER coder
+
+# ==========================================================
+# 预装 VS Code 插件
+# ==========================================================
+
+# C/C++ 扩展包
+RUN code-server --install-extension ms-vscode.cpptools-extension-pack
+
+# 嵌入式开发
+RUN code-server --install-extension marus25.cortex-debug
+RUN code-server --install-extension dan-c-underwood.arm
+RUN code-server --install-extension zixuanwang.linkerscript
+
+# 代码质量和格式化
+RUN code-server --install-extension ms-vscode.cpptools-themes
+RUN code-server --install-extension jbenden.c-cpp-flylint
+RUN code-server --install-extension xaver.clang-format
+RUN code-server --install-extension notskm.clang-tidy
+RUN code-server --install-extension cschlosser.doxdocgen
+
+# 构建工具
+RUN code-server --install-extension ms-vscode.cmake-tools
+RUN code-server --install-extension twxs.cmake
+
+# Git 和版本控制
+RUN code-server --install-extension eamodio.gitlens
+RUN code-server --install-extension mhutchie.git-graph
+
+# 主题和图标
+RUN code-server --install-extension pkief.material-icon-theme
+RUN code-server --install-extension zhuangtongfa.material-theme
+
+# 生产力工具
+RUN code-server --install-extension streetsidesoftware.code-spell-checker
+RUN code-server --install-extension usernamehw.errorlens
+RUN code-server --install-extension aaron-bond.better-comments
+RUN code-server --install-extension christian-kohler.path-intellisense
+
+# 终端和远程
+RUN code-server --install-extension fabiospampinato.vscode-terminals
+
+# ==========================================================
+# AI 编程助手插件
+# ==========================================================
+
+# Claude Code - 官方 VS Code 扩展
+# 注意：在线环境可直接安装，离线环境需要预下载 .vsix 文件
+RUN code-server --install-extension anthropic.claude-code || echo "Claude Code extension will be installed from VSIX if available"
+
+# Cline - 支持 Claude 的开源 AI 助手（备选方案）
+RUN code-server --install-extension saoudrizwan.claude-dev || echo "Cline extension will be installed from VSIX if available"
+
+# 创建 VSIX 安装目录（用于离线安装）
+RUN mkdir -p /home/coder/.local/share/code-server/vsix
+
+# 复制并安装 VSIX 插件（离线部署时使用）
+# 将 .vsix 文件放在 configs/vsix/ 目录下构建时会自动安装
+RUN mkdir -p /tmp/vsix
+COPY --chown=coder:coder configs/vsix/ /tmp/vsix/
+RUN if ls /tmp/vsix/*.vsix 1>/dev/null 2>&1; then \
+    echo "Installing VSIX extensions..." && \
+    for vsix in /tmp/vsix/*.vsix; do \
+        if [ -f "$vsix" ]; then \
+            echo "Installing: $vsix" && \
+            code-server --install-extension "$vsix" || echo "Failed to install: $vsix"; \
+        fi \
+    done \
+else \
+    echo "No VSIX files found, skipping offline extension installation"; \
+fi
+
+# 回到 root 完成配置
+USER root
+
+# 创建启动脚本，注入环境变量到 Claude Code 配置
+RUN cat > /opt/init-config.sh << 'EOF'
+#!/bin/bash
+# 根据环境变量生成 Claude Code 配置
+
+CLAUDE_CONFIG_DIR="/home/coder/.claude"
+mkdir -p "$CLAUDE_CONFIG_DIR"
+
+# 如果存在环境变量，生成配置文件
+if [ -n "$LLM_API_URL" ]; then
+    cat > "$CLAUDE_CONFIG_DIR/settings.json" << CONFIG_EOF
+{
+  "apiUrl": "$LLM_API_URL",
+  "apiKey": "$LLM_API_KEY",
+  "model": "$LLM_MODEL",
+  "customHeaders": {},
+  "timeout": 120
+}
+CONFIG_EOF
+    
+    chown -R coder:coder "$CLAUDE_CONFIG_DIR"
+fi
+
+# 继续执行原启动命令
+exec dumb-init /usr/bin/code-server "$@"
+EOF
+
+RUN chmod +x /opt/init-config.sh
+
+# 默认设置
+ENV SHELL=/bin/bash
+ENV EDITOR=code-server
+
+# 使用自定义启动脚本
+ENTRYPOINT ["/opt/init-config.sh"]
+CMD ["--bind-addr", "0.0.0.0:8080", "--disable-telemetry", "--disable-update-check", "--auth", "password"]
