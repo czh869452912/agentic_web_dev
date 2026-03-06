@@ -12,24 +12,47 @@ LABEL description="Complete embedded software engineering toolchain"
 LABEL version="2.0.0"
 
 # ============================================================
-# 第一阶段：基础系统
+# 系统包：一次性安装所有 apt 依赖，减少网络请求次数
 # ============================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    # 基础工具
     ca-certificates curl wget git git-lfs \
     vim nano less htop tree jq \
     unzip zip tar gzip bzip2 xz-utils \
+    # 构建工具
     build-essential cmake ninja-build make \
     autoconf automake libtool pkg-config \
+    # 网络和调试
     net-tools iputils-ping dnsutils netcat socat \
     gdb gdb-multiarch strace ltrace \
+    # Python
     python3 python3-pip python3-venv \
     python3-setuptools python3-wheel \
+    # 开发库
     libssl-dev libffi-dev libusb-1.0-0-dev \
     libncurses5-dev libncursesw5-dev \
+    # ARM Linux 交叉编译
+    gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf \
+    gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+    # 代码质量工具
+    clang clang-format clang-tidy clang-tools llvm \
+    cppcheck valgrind lcov splint \
+    # 文档生成
+    doxygen graphviz \
+    # 版本控制
+    git-email git-svn tig git-review \
+    # 测试框架
+    libgtest-dev libcmocka-dev \
+    # QEMU 模拟器
+    qemu-user-static qemu-system-arm qemu-system-aarch64 binfmt-support \
+    # OpenOCD 和调试器
+    openocd stlink-tools libftdi1-dev libhidapi-dev \
+    # 二进制分析和格式化
+    binwalk xxd cloc indent astyle \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
-# 第二阶段：ARM bare-metal 工具链
+# ARM bare-metal 工具链（外部下载，独立步骤）
 # ============================================================
 ENV ARM_GCC_VERSION=13.2.rel1
 RUN mkdir -p /opt/toolchains \
@@ -42,90 +65,31 @@ RUN mkdir -p /opt/toolchains \
 
 ENV PATH="/opt/toolchains/arm-none-eabi/bin:${PATH}"
 
-# ARM Linux 交叉编译
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf \
-    gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-    && rm -rf /var/lib/apt/lists/*
+# ============================================================
+# Google Test 编译安装
+# ============================================================
+RUN cd /usr/src/googletest && cmake . && make && make install
 
 # ============================================================
-# 第三阶段：代码质量与静态分析
+# Python 工具
 # ============================================================
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    clang clang-format clang-tidy clang-tools llvm \
-    cppcheck \
-    valgrind \
-    lcov \
-    splint \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN pip3 install --no-cache-dir gcovr
-
-# ============================================================
-# 第四阶段：文档生成
-# ============================================================
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    doxygen graphviz \
-    && rm -rf /var/lib/apt/lists/*
-
 RUN pip3 install --no-cache-dir \
-    sphinx \
-    sphinx-rtd-theme \
-    breathe \
-    exhale
+    gcovr \
+    meson scons conan \
+    sphinx sphinx-rtd-theme breathe exhale \
+    pyserial pyusb pyocd \
+    esptool pyelftools pycparser cffi
 
 # ============================================================
-# 第五阶段：版本控制工具
-# ============================================================
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git-email git-svn tig \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN apt-get update && apt-get install -y --no-install-recommends git-review \
-    && rm -rf /var/lib/apt/lists/*
-
-# ============================================================
-# 第六阶段：构建系统
-# ============================================================
-RUN pip3 install --no-cache-dir meson scons conan
-
-# ============================================================
-# 第七阶段：测试框架
-# ============================================================
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgtest-dev libcmocka-dev \
-    && cd /usr/src/googletest \
-    && cmake . && make && make install \
-    && rm -rf /var/lib/apt/lists/*
-
 # Unity / CMock / CException（嵌入式单元测试）
+# ============================================================
 RUN mkdir -p /opt/test-frameworks \
-    && git clone --depth 1 https://github.com/ThrowTheSwitch/Unity.git    /opt/test-frameworks/Unity \
-    && git clone --depth 1 https://github.com/ThrowTheSwitch/CMock.git    /opt/test-frameworks/CMock \
+    && git clone --depth 1 https://github.com/ThrowTheSwitch/Unity.git     /opt/test-frameworks/Unity \
+    && git clone --depth 1 https://github.com/ThrowTheSwitch/CMock.git     /opt/test-frameworks/CMock \
     && git clone --depth 1 https://github.com/ThrowTheSwitch/CException.git /opt/test-frameworks/CException
 
 # ============================================================
-# 第八阶段：QEMU 模拟器
-# ============================================================
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    qemu-user-static \
-    qemu-system-arm \
-    qemu-system-aarch64 \
-    binfmt-support \
-    && rm -rf /var/lib/apt/lists/*
-
-# ============================================================
-# 第九阶段：OpenOCD / 调试器
-# ============================================================
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    openocd \
-    stlink-tools \
-    libftdi1-dev \
-    libhidapi-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# ============================================================
-# 第十阶段：Rust（嵌入式）
+# Rust 工具链（嵌入式目标）
 # ============================================================
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
@@ -139,30 +103,7 @@ RUN rustup target add \
 RUN cargo install cargo-embed probe-rs-tools --locked
 
 # ============================================================
-# 第十一阶段：Python 嵌入式工具
-# ============================================================
-RUN pip3 install --no-cache-dir \
-    pyserial \
-    pyusb \
-    pyocd \
-    esptool \
-    pyelftools \
-    pycparser \
-    cffi
-
-# ============================================================
-# 第十二阶段：二进制分析 + 其他工具
-# ============================================================
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    binwalk \
-    xxd \
-    cloc \
-    indent \
-    astyle \
-    && rm -rf /var/lib/apt/lists/*
-
-# ============================================================
-# 第十三阶段：Claude Code CLI（通过 NodeSource 安装 Node.js）
+# Node.js + Claude Code CLI
 # ============================================================
 ENV NODE_MAJOR=20
 RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - \
@@ -172,30 +113,24 @@ RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - \
 RUN npm install -g @anthropic-ai/claude-code
 
 # ============================================================
-# 第十四阶段：环境配置（外部文件，避免 heredoc 解析问题）
+# 环境配置（外部文件，避免 heredoc 解析问题）
 # ============================================================
-
-# Git 全局配置
 RUN git config --global init.defaultBranch main \
     && git config --global color.ui auto \
     && git config --global core.editor vim
 
-# 工具链配置文件（用 printf 避免 heredoc）
 RUN mkdir -p /etc/dev-env \
     && printf '# 嵌入式开发环境工具链配置\nARM_TOOLCHAIN_PATH=/opt/toolchains/arm-none-eabi/bin\nTEST_FRAMEWORK_PATH=/opt/test-frameworks\nCMAKE_GENERATOR=Ninja\n' \
        > /etc/dev-env/tools.conf
 
-# bashrc 增强（COPY 外部文件，追加到 .bashrc）
 COPY scripts/embedded-bashrc.sh /tmp/embedded-bashrc.sh
 RUN sed -i 's/\r$//' /tmp/embedded-bashrc.sh \
     && cat /tmp/embedded-bashrc.sh >> /root/.bashrc \
     && rm /tmp/embedded-bashrc.sh
 
-# Vim 配置
 COPY scripts/embedded-vimrc /root/.vimrc
 RUN sed -i 's/\r$//' /root/.vimrc
 
-# clang-format 配置
 COPY scripts/embedded-clang-format /root/.clang-format
 RUN sed -i 's/\r$//' /root/.clang-format
 
