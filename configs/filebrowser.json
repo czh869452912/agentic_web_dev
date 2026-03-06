@@ -1,0 +1,29 @@
+{
+    "port": 8080,
+    "baseURL": "",
+    "address": "",
+    "log": "stdout",
+    "database": "/database/filebrowser.db",
+    "root": "/srv",
+    "auth": {
+        "method": "json",
+        "signup": false
+    },
+    "branding": {
+        "name": "Dev Workspace",
+        "disableExternal": true,
+        "files": ""
+    },
+    "commands": {
+        "after_copy": [],
+        "after_delete": [],
+        "after_rename": [],
+        "after_save": [],
+        "after_upload": [],
+        "before_copy": [],
+        "before_delete": [],
+        "before_rename": [],
+        "before_save": [],
+        "before_upload": []
+    }
+}

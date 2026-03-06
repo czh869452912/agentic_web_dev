@@ -1,0 +1,379 @@
+# ============================================================
+# 内网 Agentic 云开发环境 - 完整软件工程工具链镜像
+# 包含：嵌入式开发 + 代码质量 + 文档 + 版本控制全流程
+# ============================================================
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Shanghai
+
+LABEL maintainer="DevOps Team"
+LABEL description="Complete embedded software engineering toolchain"
+LABEL version="2.0.0"
+
+# ============================================================
+# 第一阶段：基础系统
+# ============================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # 基础工具
+    ca-certificates curl wget git git-lfs \
+    vim nano less htop tree jq \
+    unzip zip tar gzip bzip2 xz-utils \
+    # 构建工具
+    build-essential cmake ninja-build make \
+    autoconf automake libtool pkg-config \
+    # 网络工具
+    net-tools iputils-ping dnsutils netcat socat \
+    # 调试工具
+    gdb gdb-multiarch strace ltrace \
+    # Python 环境
+    python3 python3-pip python3-venv \
+    python3-setuptools python3-wheel \
+    # 其他依赖
+    libssl-dev libffi-dev libusb-1.0-0-dev \
+    libncurses5-dev libncursesw5-dev \
+    # 清理
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# ============================================================
+# 第二阶段：嵌入式 ARM 工具链
+# ============================================================
+ENV ARM_GCC_VERSION=13.2.rel1
+ENV ARM_GCC_URL=https://developer.arm.com/-/media/Files/downloads/gnu/${ARM_GCC_VERSION}/binrel/arm-gnu-toolchain-${ARM_GCC_VERSION}-x86_64-arm-none-eabi.tar.xz
+
+RUN mkdir -p /opt/toolchains \
+    && cd /opt/toolchains \
+    && wget -q --show-progress ${ARM_GCC_URL} -O arm-toolchain.tar.xz \
+    && tar -xf arm-toolchain.tar.xz \
+    && rm arm-toolchain.tar.xz \
+    && mv arm-gnu-toolchain-*-x86_64-arm-none-eabi arm-none-eabi
+
+ENV PATH="/opt/toolchains/arm-none-eabi/bin:${PATH}"
+
+# ARM Linux 工具链
+RUN apt-get update && apt-get install -y \
+    gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf \
+    gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================================
+# 第三阶段：代码质量和静态分析工具（核心）
+# ============================================================
+
+# Clang/LLVM 全家桶（包含 clang-format, clang-tidy, clang-check）
+RUN apt-get update && apt-get install -y \
+    clang \
+    clang-format \
+    clang-tidy \
+    clang-tools \
+    llvm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Cppcheck - 静态 C/C++ 代码分析
+RUN apt-get update && apt-get install -y cppcheck \
+    && rm -rf /var/lib/apt/lists/*
+
+# Valgrind - 内存泄漏和性能分析
+RUN apt-get update && apt-get install -y valgrind \
+    && rm -rf /var/lib/apt/lists/*
+
+# 代码覆盖率工具
+RUN apt-get update && apt-get install -y \
+    lcov \
+    gcovr \
+    && rm -rf /var/lib/apt/lists/*
+
+# PC-lint / Flexelint（商用，需自备许可证，此处预留）
+# 可选开源替代：splint
+RUN apt-get update && apt-get install -y splint \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================================
+# 第四阶段：文档生成工具
+# ============================================================
+
+# Doxygen + Graphviz
+RUN apt-get update && apt-get install -y \
+    doxygen \
+    graphviz \
+    dot2tex \
+    && rm -rf /var/lib/apt/lists/*
+
+# Sphinx（Python 文档）
+RUN pip3 install --no-cache-dir \
+    sphinx \
+    sphinx-rtd-theme \
+    breathe \
+    exhale
+
+# ============================================================
+# 第五阶段：版本控制和代码审查工具
+# ============================================================
+
+# Git 高级工具
+RUN apt-get update && apt-get install -y \
+    git-email \
+    git-svn \
+    git-cvs \
+    tig \
+    && rm -rf /var/lib/apt/lists/*
+
+# Gerrit 命令行工具（可选）
+RUN apt-get update && apt-get install -y git-review \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================================
+# 第六阶段：构建系统和 CI/CD 工具
+# ============================================================
+
+# Meson 构建系统
+RUN pip3 install --no-cache-dir meson
+
+# SCons
+RUN pip3 install --no-cache-dir scons
+
+# Conan 包管理器
+RUN pip3 install --no-cache-dir conan
+
+# xmake（现代 C/C++ 构建工具）
+RUN apt-get update && apt-get install -y xmake \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================================
+# 第七阶段：测试框架
+# ============================================================
+
+# Google Test
+RUN apt-get update && apt-get install -y \
+    libgtest-dev \
+    cmake \
+    && cd /usr/src/googletest \
+    && cmake . \
+    && make \
+    && make install \
+    && rm -rf /var/lib/apt/lists/*
+
+# CMocka
+RUN apt-get update && apt-get install -y libcmocka-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Unity Test（嵌入式单元测试）- 下载安装
+RUN mkdir -p /opt/test-frameworks \
+    && cd /opt/test-frameworks \
+    && git clone --depth 1 https://github.com/ThrowTheSwitch/Unity.git \
+    && git clone --depth 1 https://github.com/ThrowTheSwitch/CMock.git \
+    && git clone --depth 1 https://github.com/ThrowTheSwitch/CException.git
+
+# ============================================================
+# 第八阶段：QEMU 模拟器
+# ============================================================
+RUN apt-get update && apt-get install -y \
+    qemu-user-static \
+    qemu-system-arm \
+    qemu-system-aarch64 \
+    binfmt-support \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================================
+# 第九阶段：OpenOCD 调试器
+# ============================================================
+RUN apt-get update && apt-get install -y \
+    openocd \
+    stlink-tools \
+    libftdi1-dev \
+    libhidapi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================================
+# 第十阶段：Rust（现代嵌入式开发）
+# ============================================================
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN rustup target add \
+    thumbv7m-none-eabi \
+    thumbv7em-none-eabihf \
+    thumbv8m.main-none-eabi \
+    aarch64-unknown-none-softfloat
+
+# cargo-embed 和 probe-rs
+RUN cargo install cargo-embed probe-rs-tools --locked
+
+# ============================================================
+# 第十一阶段：Python 嵌入式工具
+# ============================================================
+RUN pip3 install --no-cache-dir \
+    pyserial \
+    pyusb \
+    pyocd \
+    mbed-cli \
+    platformio \
+    esptool \
+    ampy \
+    rshell \
+    miniterm \
+    pyelftools \
+    pycparser \
+    cffi
+
+# ============================================================
+# 第十二阶段：其他实用工具
+# ============================================================
+
+# 二进制分析
+RUN apt-get update && apt-get install -y \
+    binwalk \
+    hexdump \
+    xxd \
+    && rm -rf /var/lib/apt/lists/*
+
+# 代码统计
+RUN apt-get update && apt-get install -y cloc \
+    && rm -rf /var/lib/apt/lists/*
+
+# 格式化工具
+RUN apt-get update && apt-get install -y \
+    indent \
+    astyle \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================================
+# 第十三阶段：Claude Code CLI
+# ============================================================
+ENV NODE_VERSION=20.11.1
+ENV NVM_DIR=/root/.nvm
+
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash \
+    && . "$NVM_DIR/nvm.sh" \
+    && nvm install ${NODE_VERSION} \
+    && nvm alias default ${NODE_VERSION} \
+    && nvm use default
+
+ENV PATH="$NVM_DIR/versions/node/v${NODE_VERSION}/bin/:${PATH}"
+
+RUN npm install -g @anthropic-ai/claude-code
+
+# ============================================================
+# 第十四阶段：环境配置
+# ============================================================
+
+# Git 配置
+RUN git config --global init.defaultBranch main \
+    && git config --global color.ui auto \
+    && git config --global core.editor vim
+
+# 创建工具链配置文件
+RUN mkdir -p /etc/dev-env \
+    && cat > /etc/dev-env/tools.conf << 'EOF'
+# 内网开发环境工具链配置
+ARM_TOOLCHAIN_PATH=/opt/toolchains/arm-none-eabi/bin
+TEST_FRAMEWORK_PATH=/opt/test-frameworks
+CMAKE_GENERATOR=Ninja
+EOF
+
+# Bash 增强配置
+RUN cat >> /root/.bashrc << 'EOF'
+
+# ============================================
+# 嵌入式开发环境配置
+# ============================================
+
+# 工具链别名
+alias arm-gcc='arm-none-eabi-gcc'
+alias arm-g++='arm-none-eabi-g++'
+alias arm-objdump='arm-none-eabi-objdump'
+alias arm-size='arm-none-eabi-size'
+alias arm-gdb='arm-none-eabi-gdb'
+alias arm-nm='arm-none-eabi-nm'
+alias arm-readelf='arm-none-eabi-readelf'
+
+# 代码质量工具别名
+alias cf='clang-format'
+alias ct='clang-tidy'
+alias cppc='cppcheck --enable=all --suppress=missingIncludeSystem'
+
+# 覆盖率别名
+alias cov='gcovr -r . --html --html-details -o coverage.html'
+
+# 常用目录
+export WORKSPACE=/workspace
+export TOOLCHAINS=/opt/toolchains
+export TEST_FRAMEWORKS=/opt/test-frameworks
+
+# 提示符
+export PS1='\[\e[32m\][embedded-dev]\[\e[0m\] \w \$ '
+
+# 工具路径
+export PATH="/opt/toolchains/arm-none-eabi/bin:$PATH"
+export PATH="/root/.cargo/bin:$PATH"
+
+# 欢迎信息
+echo "=========================================="
+echo "  Embedded Dev Environment v2.0"
+echo "=========================================="
+echo "可用工具:"
+echo "  编译: arm-gcc, clang, cmake, meson"
+echo "  检查: clang-tidy, cppcheck, valgrind"
+echo "  测试: gtest, cmocka, unity"
+echo "  调试: gdb, openocd, qemu"
+echo "  文档: doxygen, sphinx"
+echo "  AI:   claude"
+echo "=========================================="
+EOF
+
+# Vim 配置
+RUN cat > /root/.vimrc << 'EOF'
+" 基础设置
+set number
+set tabstop=4
+set shiftwidth=4
+set expandtab
+set autoindent
+set smartindent
+set cindent
+syntax on
+set hlsearch
+set incsearch
+set background=dark
+set cursorline
+set colorcolumn=80,120
+set nowrap
+set encoding=utf-8
+
+" C/C++ 特定
+autocmd FileType c,cpp setlocal cindent cinoptions=g0
+EOF
+
+# Clang-Format 配置
+RUN cat > /root/.clang-format << 'EOF'
+---
+Language: Cpp
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 80
+AllowShortFunctionsOnASingleLine: Empty
+BreakBeforeBraces: Attach
+PointerAlignment: Right
+SortIncludes: true
+IncludeBlocks: Regroup
+---
+Language: C
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 80
+EOF
+
+# ============================================================
+# 工作目录
+# ============================================================
+WORKDIR /workspace
+VOLUME ["/workspace", "/opt/toolchains", "/opt/test-frameworks"]
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD arm-none-eabi-gcc --version && clang-tidy --version && cppcheck --version || exit 1
+
+CMD ["/bin/bash"]

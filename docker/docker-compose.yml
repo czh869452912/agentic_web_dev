@@ -1,0 +1,166 @@
+# ============================================================
+# 内网 Agentic 云开发环境 - Docker Compose 配置
+# 接入内网 OpenAI 兼容 API（非本地部署）
+# ============================================================
+
+services:
+  # ==========================================================
+  # 1. 网关层：Nginx 反向代理（唯一对外端口）
+  # ==========================================================
+  gateway:
+    image: nginx:alpine
+    container_name: dev-gateway
+    hostname: gateway
+    ports:
+      - "${GATEWAY_PORT:-8443}:8443"
+    volumes:
+      - ../configs/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../configs/ssl:/etc/nginx/ssl:ro
+      - ../logs/nginx:/var/log/nginx
+    environment:
+      - NGINX_ENTRYPOINT_QUIET_LOGS=1
+    depends_on:
+      code-server:
+        condition: service_started
+      claude-web:
+        condition: service_started
+    networks:
+      devnet:
+        aliases:
+          - gateway.local
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================
+  # 2. Code Server：Web 版 VS Code（预装插件）
+  # ==========================================================
+  code-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.code-server
+    container_name: code-server
+    hostname: code-server
+    environment:
+      - PASSWORD=${CODE_SERVER_PASSWORD:-changeme}
+      - SUDO_PASSWORD=${SUDO_PASSWORD:-changeme}
+      - VSCODE_PROXY_URI=https://{{host}}:{{port}}/
+      - DEFAULT_WORKSPACE=/workspace
+      # 内网大模型 API 配置
+      - LLM_API_URL=${LLM_API_URL:-http://internal-llm:8000/v1}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4}
+    volumes:
+      - ../workspace:/workspace
+      - code-extensions:/home/coder/.local/share/code-server/extensions
+      - code-config:/home/coder/.config/code-server
+    networks:
+      devnet:
+        aliases:
+          - vscode.local
+    restart: unless-stopped
+    # 不直接暴露端口，仅通过网关访问
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================
+  # 3. Claude Code 服务（连接内网 API）
+  # ==========================================================
+  claude-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.claude
+    container_name: claude-web
+    hostname: claude-web
+    environment:
+      # 内网大模型 API 配置（关键）
+      - ANTHROPIC_BASE_URL=${LLM_API_URL:-http://internal-llm:8000/v1}
+      - ANTHROPIC_API_KEY=${LLM_API_KEY:-}
+      - CLAUDE_CODE_MODEL=${LLM_MODEL:-gpt-4}
+      - WORKSPACE_DIR=/workspace
+      - PORT=3000
+      - HOST=0.0.0.0
+    volumes:
+      - ../workspace:/workspace
+      - claude-config:/root/.claude
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../configs/claude-config.json:/root/.claude/settings.json:ro
+    networks:
+      devnet:
+        aliases:
+          - claude.local
+    restart: unless-stopped
+    # 如果内网 API 需要特定网络访问，可配置 extra_hosts 或 dns
+    extra_hosts:
+      - "internal-llm:${LLM_HOST_IP:-127.0.0.1}"
+
+  # ==========================================================
+  # 4. 嵌入式开发环境（全工具链）
+  # ==========================================================
+  embedded-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.embedded
+    container_name: embedded-dev
+    hostname: embedded-dev
+    volumes:
+      - ../workspace:/workspace
+      - dev-toolchains:/opt/toolchains
+      - /dev:/dev
+    privileged: true
+    networks:
+      devnet:
+        aliases:
+          - embedded.local
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+
+  # ==========================================================
+  # 5. 文件浏览器
+  # ==========================================================
+  filebrowser:
+    image: filebrowser/filebrowser:v2.27.0
+    container_name: filebrowser
+    hostname: filebrowser
+    volumes:
+      - ../workspace:/srv
+      - filebrowser-db:/database
+      - ../configs/filebrowser.json:/.filebrowser.json:ro
+    environment:
+      - FB_DATABASE=/database/filebrowser.db
+      - FB_ROOT=/srv
+      - FB_PORT=8080
+    networks:
+      devnet:
+        aliases:
+          - files.local
+    restart: unless-stopped
+
+networks:
+  devnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  code-extensions:
+    driver: local
+  code-config:
+    driver: local
+  claude-config:
+    driver: local
+  dev-toolchains:
+    driver: local
+  filebrowser-db:
+    driver: local
