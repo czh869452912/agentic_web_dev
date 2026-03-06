@@ -81,7 +81,7 @@ claude
 
 ## 配置生效方式
 
-API 配置通过环境变量注入 code-server 容器，容器启动脚本 `/opt/entrypoint.sh` 自动将其写入 `/home/coder/.claude/settings.json`。
+API 配置通过环境变量注入 code-server 容器，容器启动脚本 `/opt/entrypoint.sh` 自动将其写入 `/root/.claude/settings.json`（容器以 root 身份运行）。
 
 查看当前配置：
 
@@ -90,7 +90,7 @@ API 配置通过环境变量注入 code-server 容器，容器启动脚本 `/opt
 claude config get
 
 # 或直接查看文件
-cat ~/.claude/settings.json
+cat /root/.claude/settings.json
 ```
 
 修改配置后需重启服务：
@@ -143,7 +143,7 @@ ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxx
 
 2. **检查配置文件**
    ```bash
-   docker exec code-server cat /home/coder/.claude/settings.json
+   docker exec code-server cat /root/.claude/settings.json
    ```
 
 3. **手动测试 API**（在容器终端）

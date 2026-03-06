@@ -2,9 +2,9 @@
 set -e
 
 # ---- 配置 Claude Code ----
-CLAUDE_DIR="/home/coder/.claude"
+# 容器以 root 运行，Claude Code 读取 /root/.claude/settings.json
+CLAUDE_DIR="/root/.claude"
 mkdir -p "$CLAUDE_DIR"
-chown coder:coder "$CLAUDE_DIR"
 
 if [ -n "$ANTHROPIC_API_KEY" ] || [ -n "$ANTHROPIC_BASE_URL" ]; then
     cat > "$CLAUDE_DIR/settings.json" <<CONFIG_EOF
@@ -16,7 +16,6 @@ if [ -n "$ANTHROPIC_API_KEY" ] || [ -n "$ANTHROPIC_BASE_URL" ]; then
   }
 }
 CONFIG_EOF
-    chown coder:coder "$CLAUDE_DIR/settings.json"
     echo "[entrypoint] Claude Code configured: ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-<default Anthropic>}"
 else
     echo "[entrypoint] No API config found, Claude Code will use interactive login"

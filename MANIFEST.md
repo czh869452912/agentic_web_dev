@@ -17,9 +17,9 @@
 
 | 文件 | 用途 | 实测大小 |
 |------|------|----------|
-| `docker/Dockerfile.code-server` | VS Code + Claude Code CLI + ARM 工具链 + 15+ 扩展 | ~4GB |
-| `docker/Dockerfile.embedded` | 完整重型工具链（QEMU、Rust、Unity Test 等） | ~3GB |
-| `docker/docker-compose.yml` | 服务编排（3 个服务：gateway、code-server、embedded-dev、filebrowser） | - |
+| `docker/Dockerfile.code-server` | VS Code + Claude Code CLI + ARM 工具链 + 13+ 扩展 | ~4GB |
+| `docker/Dockerfile.embedded` | 完整重型工具链（QEMU、Rust、probe-rs 等） | ~3GB |
+| `docker/docker-compose.yml` | 服务编排（4 个服务：gateway、code-server、embedded-dev、filebrowser） | - |
 
 ## 脚本
 
@@ -38,7 +38,6 @@
 | `CONFIGURATION.md` | API 配置详细指南 |
 | `MANIFEST.md` | 本文件 |
 | `EXTENSIONS.md` | VS Code 扩展说明 |
-| `docker-build-test-report.md` | Docker 构建测试报告 |
 
 ## 其他
 

@@ -2,27 +2,27 @@
 
 ## 预装扩展列表
 
-构建时通过 `code-server --install-extension` 自动安装以下扩展：
+构建时通过 `code-server --install-extension` 自动安装以下扩展（均已验证可安装）：
 
 ### AI 编程助手
 
 | 扩展 ID | 名称 | 说明 |
 |---------|------|------|
-| `anthropic.claude-code` | Claude Code | Anthropic 官方扩展，提供侧边栏 UI |
-| `saoudrizwan.claude-dev` | Cline | 开源备选，同样支持 Claude API |
+| `saoudrizwan.claude-dev` | Cline | 支持 Claude API 的开源 AI 编程助手，提供侧边栏 UI |
 
-**注意**：Claude Code 的核心能力通过终端 `claude` 命令使用，VS Code 扩展提供图形化界面。两种方式都可用。
+> **注意**：`anthropic.claude-code` 官方扩展与 code-server v4.21.0 不兼容，未安装。Claude Code 通过终端 `claude` 命令使用，功能完整。
 
-### C/C++ 开发
+### 嵌入式 / C/C++ 开发
 
 | 扩展 ID | 名称 |
 |---------|------|
-| `ms-vscode.cpptools-extension-pack` | C/C++ 完整支持包（含 IntelliSense、调试） |
 | `marus25.cortex-debug` | ARM Cortex-M 调试（配合 OpenOCD/JLink） |
 | `dan-c-underwood.arm` | ARM 汇编语法高亮 |
 | `zixuanwang.linkerscript` | 链接器脚本（.ld）语法支持 |
 | `ms-vscode.cmake-tools` | CMake 项目支持 |
 | `twxs.cmake` | CMake 语法高亮 |
+
+> **说明**：`ms-vscode.cpptools-extension-pack` 在 code-server marketplace 中不可用。如需 C/C++ IntelliSense，请将 VSIX 文件放入 `configs/vsix/` 目录后重新构建镜像。
 
 ### 代码质量
 
@@ -67,17 +67,17 @@
 
    或通过命令行：
    ```bash
-   # 示例：下载 Claude Code 扩展（需替换实际版本号）
-   wget "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/anthropic/vsextensions/claude-code/latest/vspackage" \
-     -O anthropic.claude-code.vsix
+   # 示例：下载 C/C++ 扩展包（需替换实际版本号）
+   wget "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/ms-vscode/vsextensions/cpptools/latest/vspackage" \
+     -O ms-vscode.cpptools.vsix
    ```
 
 2. **放入 configs/vsix/ 目录**
 
    ```
    configs/vsix/
-   ├── anthropic.claude-code-x.x.x.vsix
-   └── saoudrizwan.claude-dev-x.x.x.vsix
+   ├── ms-vscode.cpptools-1.x.x.vsix
+   └── ms-vscode.cpptools-extension-pack-x.x.x.vsix
    ```
 
 3. **构建时自动安装**

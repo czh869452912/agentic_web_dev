@@ -11,7 +11,7 @@
 | **单端口入口** | 所有服务通过 8443 端口（HTTPS）访问 |
 | **Claude Code 内置** | Claude Code CLI 与 VS Code 在同一容器，终端直接使用 |
 | **嵌入式工具链** | ARM GCC 13.2、clang-tidy、cppcheck、OpenOCD 等内置于 IDE 容器 |
-| **完整扩展** | C/C++、Cortex-Debug、CMake、GitLens 等 15+ 插件预装 |
+| **完整扩展** | Cortex-Debug、CMake、GitLens、Cline 等 13+ 插件预装 |
 | **Web IDE** | 完整的 VS Code 功能（code-server） |
 | **离线友好** | 支持预下载镜像 + VSIX 离线部署 |
 
@@ -32,7 +32,7 @@
        │                   ├── clang / clang-format / clang-tidy
        │                   ├── cppcheck / valgrind / lcov / gcovr
        │                   ├── gdb-multiarch / openocd
-       │                   └── 15+ VS Code 扩展
+       │                   └── 13+ VS Code 扩展
        │
        ├── /files/    →  filebrowser（Web 文件管理）
        │
@@ -155,10 +155,10 @@ claude src/main.c
 claude config get
 
 # 切换模型
-claude config set model claude-opus-4-5
+claude config set model claude-sonnet-4-6
 ```
 
-Claude Code VS Code 扩展（`anthropic.claude-code`）也已预装，提供侧边栏 UI。
+> Claude Code 通过终端 CLI 使用。`anthropic.claude-code` 官方 VS Code 扩展与当前 code-server 版本不兼容，已预装 Cline（`saoudrizwan.claude-dev`）作为可视化 AI 助手备选。
 
 ---
 
@@ -214,13 +214,11 @@ qemu-system-arm -M stm32-p103 -kernel firmware.elf
 ### AI 编程助手
 | 扩展 | ID |
 |------|-----|
-| Claude Code | `anthropic.claude-code` |
-| Cline（备选） | `saoudrizwan.claude-dev` |
+| Cline | `saoudrizwan.claude-dev` |
 
-### C/C++ 开发
+### 嵌入式 / C/C++ 开发
 | 扩展 | ID |
 |------|-----|
-| C/C++ Extension Pack | `ms-vscode.cpptools-extension-pack` |
 | Cortex-Debug | `marus25.cortex-debug` |
 | ARM 汇编 | `dan-c-underwood.arm` |
 | 链接器脚本 | `zixuanwang.linkerscript` |
@@ -244,6 +242,8 @@ qemu-system-arm -M stm32-p103 -kernel firmware.elf
 | Path Intellisense | `christian-kohler.path-intellisense` |
 | Code Spell Checker | `streetsidesoftware.code-spell-checker` |
 | Material Icon Theme | `pkief.material-icon-theme` |
+
+> **说明**：`anthropic.claude-code` 与 code-server v4.21.0 不兼容未安装；`ms-vscode.cpptools-extension-pack` 在 code-server marketplace 中不可用。如需 C/C++ IntelliSense，请将对应 VSIX 放入 `configs/vsix/` 离线安装。
 
 ---
 
@@ -338,6 +338,23 @@ docker exec code-server bash -c "echo $PATH"
 docker exec code-server which arm-none-eabi-gcc
 ```
 
+### WebSocket 错误 1006（工作台无法连接）
+
+nginx 必须使用 `$http_host`（含端口）转发 Host 头，否则 code-server CSRF 检查会拒绝 WebSocket 升级请求（返回 403）。当前配置已正确设置，若自定义 nginx 配置请确保：
+
+```nginx
+# code-server location 块中：
+proxy_set_header Host $http_host;  # 不能用 $host（会丢失端口）
+```
+
+### 构建时 apt-get 网络错误
+
+国内环境 `archive.ubuntu.com` 可能无法访问。Dockerfile 已切换至阿里云 HTTP 镜像，若仍失败可改为：
+
+```dockerfile
+RUN sed -i 's|http://mirrors.aliyun.com/ubuntu|http://mirrors.tuna.tsinghua.edu.cn/ubuntu|g' /etc/apt/sources.list
+```
+
 ### 容器启动失败
 
 ```bash
@@ -366,17 +383,19 @@ docker logs dev-gateway
 
 ## 更新日志
 
+### v3.1.0 (2026-03-06)
+- 修复 nginx WebSocket 代理（`$host` → `$http_host`），解决工作台无法连接（错误 1006）
+- 切换 apt 源至阿里云 HTTP 镜像，解决国内网络无法构建问题
+- 移除不可用包（`cloc`、`astyle` 等）及已被 `probe-rs-tools` 替代的 `cargo-embed`
+- 文档全面更新，与实际测试状态保持一致
+
 ### v3.0.0 (2026-03-06)
 - Claude Code CLI 与 code-server 合并为单一容器，终端直接使用 `claude`
 - ARM GCC 13.2 / clang / cppcheck / openocd 内置于 IDE 容器
 - 移除独立 claude-web 服务（原为无功能静态页）
 - 新增 Windows PowerShell 管理脚本 `scripts/manage.ps1`
-- 修复 nginx 健康检查端口、build context 路径等问题
+- 修复 nginx 健康检查、build context、docker compose v1/v2 兼容性等问题
 - 新增 `.gitattributes` 防止 Windows CRLF 破坏 Linux 脚本
-
-### v2.0.0 (2026-03-05)
-- 支持内网 OpenAI 兼容 API
-- 预装 15+ VS Code 插件
 
 ### v1.0.0 (2026-03-05)
 - 初始版本
