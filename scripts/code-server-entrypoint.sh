@@ -28,9 +28,23 @@ else
     echo "[entrypoint] WARNING: claude CLI not found in PATH"
 fi
 
+# ---- 合并内置插件 seed 到 extensions 目录 ----
+# seed 目录随镜像构建，volume 挂载不会覆盖它；每次启动时将内置插件同步过去
+# -n (no-clobber) 保证不覆盖用户在运行时手动安装的同名插件
+SEED_DIR="${CODE_SERVER_EXTENSIONS_SEED:-/opt/code-server-extensions-seed}"
+EXT_DIR="/home/coder/.local/share/code-server/extensions"
+if [ -d "$SEED_DIR" ] && [ "$(ls -A "$SEED_DIR" 2>/dev/null)" ]; then
+    mkdir -p "$EXT_DIR"
+    cp -rn "$SEED_DIR"/. "$EXT_DIR"/
+    chown -R coder:coder "$EXT_DIR"
+    echo "[entrypoint] Built-in extensions merged from $SEED_DIR"
+fi
+
 # ---- 启动 code-server ----
 exec dumb-init /usr/bin/code-server \
     --bind-addr 0.0.0.0:8080 \
+    --extensions-dir /home/coder/.local/share/code-server/extensions \
+    --user-data-dir /home/coder/.local/share/code-server \
     --disable-telemetry \
     --disable-update-check \
     --auth password \

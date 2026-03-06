@@ -96,44 +96,47 @@ RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - \
 RUN npm install -g @anthropic-ai/claude-code
 
 # ============================================================
-# VS Code 插件（以 coder 用户身份）
+# VS Code 插件（安装到 seed 目录，不被 volume 覆盖）
+# entrypoint 启动时自动合并到实际 extensions 目录
 # ============================================================
-USER coder
+ENV CODE_SERVER_EXTENSIONS_SEED=/opt/code-server-extensions-seed
 
-RUN code-server --install-extension ms-vscode.cpptools-extension-pack
-RUN code-server --install-extension marus25.cortex-debug
-RUN code-server --install-extension dan-c-underwood.arm
-RUN code-server --install-extension zixuanwang.linkerscript
-RUN code-server --install-extension jbenden.c-cpp-flylint
-RUN code-server --install-extension xaver.clang-format
-RUN code-server --install-extension notskm.clang-tidy
-RUN code-server --install-extension cschlosser.doxdocgen
-RUN code-server --install-extension ms-vscode.cmake-tools
-RUN code-server --install-extension twxs.cmake
-RUN code-server --install-extension eamodio.gitlens
-RUN code-server --install-extension mhutchie.git-graph
-RUN code-server --install-extension pkief.material-icon-theme
-RUN code-server --install-extension streetsidesoftware.code-spell-checker
-RUN code-server --install-extension usernamehw.errorlens
-RUN code-server --install-extension christian-kohler.path-intellisense
+RUN mkdir -p ${CODE_SERVER_EXTENSIONS_SEED}
+
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension ms-vscode.cpptools-extension-pack
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension marus25.cortex-debug
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension dan-c-underwood.arm
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension zixuanwang.linkerscript
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension jbenden.c-cpp-flylint
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension xaver.clang-format
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension notskm.clang-tidy
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension cschlosser.doxdocgen
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension ms-vscode.cmake-tools
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension twxs.cmake
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension eamodio.gitlens
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension mhutchie.git-graph
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension pkief.material-icon-theme
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension streetsidesoftware.code-spell-checker
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension usernamehw.errorlens
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension christian-kohler.path-intellisense
 
 # Claude Code 官方扩展（在线时安装，离线时跳过）
-RUN code-server --install-extension anthropic.claude-code \
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension anthropic.claude-code \
     || echo "[INFO] Claude Code extension not in marketplace, use VSIX instead"
 
 # Cline 备选
-RUN code-server --install-extension saoudrizwan.claude-dev \
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension saoudrizwan.claude-dev \
     || echo "[INFO] Cline not available, skipping"
 
 # ============================================================
 # 离线 VSIX 安装（将 .vsix 放在 configs/vsix/ 目录）
 # ============================================================
 RUN mkdir -p /tmp/vsix
-COPY --chown=coder:coder configs/vsix/ /tmp/vsix/
+COPY configs/vsix/ /tmp/vsix/
 RUN if ls /tmp/vsix/*.vsix 1>/dev/null 2>&1; then \
         for vsix in /tmp/vsix/*.vsix; do \
             echo "Installing: $vsix" && \
-            code-server --install-extension "$vsix" || echo "Failed: $vsix"; \
+            code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension "$vsix" || echo "Failed: $vsix"; \
         done; \
     else \
         echo "[INFO] No VSIX files, skipping offline install"; \
@@ -147,8 +150,8 @@ USER root
 # VS Code 工作区默认设置
 COPY --chown=coder:coder configs/settings.json /home/coder/.local/share/code-server/User/settings.json
 
-# 嵌入式工具别名加入 coder 的 bashrc
-RUN printf '\n# ==== Embedded Dev Environment ====\n\
+# 嵌入式工具别名写入系统级 profile（容器以 root 运行，/home/coder/.bashrc 不会被加载）
+RUN printf '# ==== Embedded Dev Environment ====\n\
 export PATH="/opt/toolchains/arm-none-eabi/bin:$PATH"\n\
 alias arm-gcc="arm-none-eabi-gcc"\n\
 alias arm-objdump="arm-none-eabi-objdump"\n\
@@ -157,7 +160,8 @@ alias cf="clang-format"\n\
 alias ct="clang-tidy"\n\
 alias cppc="cppcheck --enable=all --suppress=missingIncludeSystem"\n\
 alias cov="gcovr -r . --html --html-details -o coverage.html"\n' \
-    >> /home/coder/.bashrc
+    > /etc/profile.d/embedded-dev.sh \
+    && cat /etc/profile.d/embedded-dev.sh >> /etc/bash.bashrc
 
 # 启动脚本（外部文件，避免 heredoc 解析问题）
 COPY scripts/code-server-entrypoint.sh /opt/entrypoint.sh
