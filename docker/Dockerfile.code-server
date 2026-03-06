@@ -3,7 +3,7 @@
 # VS Code Web IDE，内置 Claude Code CLI，可直接在终端使用
 # ============================================================
 
-FROM codercom/code-server:4.21.0
+FROM codercom/code-server:latest
 
 USER root
 
