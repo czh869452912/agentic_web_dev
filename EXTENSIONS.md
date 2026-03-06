@@ -1,60 +1,156 @@
-# Claude Code VS Code 扩展添加完成
+# VS Code 扩展说明
 
-## 新增内容
+## 预装扩展列表
 
-### 1. 预装扩展
+构建时通过 `code-server --install-extension` 自动安装以下扩展：
 
-Dockerfile.code-server 现在预装以下 AI 编程助手扩展：
+### AI 编程助手
 
-| 扩展 | ID | 说明 |
-|------|-----|------|
-| **Claude Code** | `anthropic.claude-code` | 官方 VS Code 扩展 |
-| **Cline** | `saoudrizwan.claude-dev` | 开源备选方案 |
+| 扩展 ID | 名称 | 说明 |
+|---------|------|------|
+| `anthropic.claude-code` | Claude Code | Anthropic 官方扩展，提供侧边栏 UI |
+| `saoudrizwan.claude-dev` | Cline | 开源备选，同样支持 Claude API |
 
-### 2. 离线安装支持
+**注意**：Claude Code 的核心能力通过终端 `claude` 命令使用，VS Code 扩展提供图形化界面。两种方式都可用。
 
-创建了 `configs/vsix/` 目录用于存放 `.vsix` 离线安装包：
+### C/C++ 开发
 
-```
-configs/vsix/
-├── README.md                    # 详细安装指南
-├── anthropic.claude-code-*.vsix    # Claude Code 官方扩展（需自行下载）
-└── saoudrizwan.claude-dev-*.vsix   # Cline 扩展（备选）
-```
+| 扩展 ID | 名称 |
+|---------|------|
+| `ms-vscode.cpptools-extension-pack` | C/C++ 完整支持包（含 IntelliSense、调试） |
+| `marus25.cortex-debug` | ARM Cortex-M 调试（配合 OpenOCD/JLink） |
+| `dan-c-underwood.arm` | ARM 汇编语法高亮 |
+| `zixuanwang.linkerscript` | 链接器脚本（.ld）语法支持 |
+| `ms-vscode.cmake-tools` | CMake 项目支持 |
+| `twxs.cmake` | CMake 语法高亮 |
 
-### 3. Dockerfile 更新
+### 代码质量
 
-- 在线安装：自动从 Marketplace 安装 `anthropic.claude-code`
-- 离线安装：自动检测并安装 `configs/vsix/*.vsix` 文件
-- 使用 `|| echo` 确保安装失败不影响构建
+| 扩展 ID | 名称 |
+|---------|------|
+| `jbenden.c-cpp-flylint` | 集成 clang-tidy、cppcheck 等静态分析 |
+| `xaver.clang-format` | clang-format 代码格式化 |
+| `notskm.clang-tidy` | clang-tidy 检查提示 |
+| `cschlosser.doxdocgen` | Doxygen 注释生成 |
 
-### 4. 文档更新
+### Git 和版本控制
 
-- `README.md` - 添加 AI 插件章节
-- `QUICKSTART.md` - 更新插件清单
-- `MANIFEST.md` - 更新文件清单
-- `configs/vsix/README.md` - 详细的离线安装指南
+| 扩展 ID | 名称 |
+|---------|------|
+| `eamodio.gitlens` | Git 增强（行级 blame、历史等） |
+| `mhutchie.git-graph` | 可视化 Git 分支图 |
 
-## Claude Code 扩展功能
+### 生产力
 
-- ✅ 原生图形界面，集成在 VS Code 侧边栏
-- ✅ 文件编辑建议，内联 diff 显示
-- ✅ @-mentions 引用文件或代码行
-- ✅ 对话历史保存和多标签页
-- ✅ Quick Fix 集成（Ctrl+. 调用 Claude 修复）
-- ✅ 支持连接内网 OpenAI 兼容 API
+| 扩展 ID | 名称 |
+|---------|------|
+| `usernamehw.errorlens` | 错误/警告内联显示 |
+| `christian-kohler.path-intellisense` | 文件路径自动补全 |
+| `streetsidesoftware.code-spell-checker` | 英文拼写检查 |
+| `pkief.material-icon-theme` | 文件图标主题 |
 
-## 使用方式
+---
 
-### 在线环境
+## 离线安装扩展
+
+在无法访问 VS Code Marketplace 的内网环境中，需要预先下载 `.vsix` 文件。
+
+### 步骤
+
+1. **在外网下载 VSIX**
+
+   从 VS Code Marketplace 网站下载：
+   ```
+   https://marketplace.visualstudio.com/items?itemName=<扩展ID>
+   ```
+   点击页面中的 "Download Extension" 链接。
+
+   或通过命令行：
+   ```bash
+   # 示例：下载 Claude Code 扩展（需替换实际版本号）
+   wget "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/anthropic/vsextensions/claude-code/latest/vspackage" \
+     -O anthropic.claude-code.vsix
+   ```
+
+2. **放入 configs/vsix/ 目录**
+
+   ```
+   configs/vsix/
+   ├── anthropic.claude-code-x.x.x.vsix
+   └── saoudrizwan.claude-dev-x.x.x.vsix
+   ```
+
+3. **构建时自动安装**
+
+   Dockerfile 会自动检测并安装该目录下所有 `.vsix` 文件。
+
+### 在运行中的容器里手动安装
+
 ```bash
-./scripts/manage.sh build
-# 会自动从 Marketplace 安装 Claude Code 扩展
+# 将 VSIX 文件复制到容器
+docker cp my-extension.vsix code-server:/tmp/
+
+# 在容器内安装
+docker exec code-server code-server --install-extension /tmp/my-extension.vsix
+
+# 刷新浏览器即可看到新扩展
 ```
 
-### 离线环境
-1. 在外网下载 `anthropic.claude-code-*.vsix`
-2. 放入 `configs/vsix/` 目录
-3. 构建镜像时会自动安装
+---
 
-详细步骤见 `configs/vsix/README.md`
+## 扩展配置
+
+### Claude Code 扩展连接内网 API
+
+Claude Code VS Code 扩展遵循与 CLI 相同的配置，通过容器环境变量自动注入：
+
+- `ANTHROPIC_API_KEY` → API 密钥
+- `ANTHROPIC_BASE_URL` → API 基础地址（内网代理）
+
+在 VS Code 设置中也可手动配置（`settings.json`）。
+
+### Cortex-Debug 配置示例
+
+在 `.vscode/launch.json` 中：
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug STM32",
+      "type": "cortex-debug",
+      "request": "launch",
+      "servertype": "openocd",
+      "gdbPath": "arm-none-eabi-gdb",
+      "device": "STM32F407VG",
+      "configFiles": [
+        "interface/stlink.cfg",
+        "target/stm32f4x.cfg"
+      ],
+      "executable": "${workspaceFolder}/build/firmware.elf",
+      "runToEntryPoint": "main"
+    }
+  ]
+}
+```
+
+### C/C++ IntelliSense 配置
+
+在 `.vscode/c_cpp_properties.json` 中配置 ARM 工具链：
+
+```json
+{
+  "configurations": [
+    {
+      "name": "ARM",
+      "includePath": ["${workspaceFolder}/**"],
+      "defines": ["STM32F407xx", "USE_HAL_DRIVER"],
+      "compilerPath": "/opt/toolchains/arm-none-eabi/bin/arm-none-eabi-gcc",
+      "cStandard": "c11",
+      "cppStandard": "c++17",
+      "intelliSenseMode": "gcc-arm"
+    }
+  ]
+}
+```

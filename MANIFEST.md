@@ -4,29 +4,30 @@
 
 | 文件 | 用途 | 需要修改 |
 |------|------|----------|
-| `docker/.env` | 环境变量（API URL、密码等） | ✅ 必须 |
-| `docker/.env.example` | 配置模板 | ❌ 参考 |
-| `configs/nginx.conf` | 反向代理配置 | ⚠️ 可选 |
-| `configs/settings.json` | VS Code 默认设置 | ⚠️ 可选 |
-| `configs/filebrowser.json` | 文件浏览器配置 | ❌ 一般不改 |
-| `configs/claude-config.json` | Claude Code 配置模板 | ❌ 自动生成 |
-| `configs/vsix/README.md` | Claude Code VSIX 离线安装指南 | ❌ 参考 |
-| `configs/ssl/` | SSL 证书目录 | ✅ 自动生成 |
+| `docker/.env` | 环境变量（API Key、密码等） | 必须 |
+| `docker/.env.example` | 配置模板 | 参考 |
+| `configs/nginx.conf` | 反向代理配置 | 可选 |
+| `configs/settings.json` | VS Code 默认设置 | 可选 |
+| `configs/filebrowser.json` | 文件浏览器配置 | 一般不改 |
+| `configs/ssl/` | SSL 证书目录（`up` 时自动生成） | 自动 |
+| `configs/vsix/` | 离线 VSIX 扩展安装包目录 | 离线部署时放入 |
+| `configs/vsix/README.md` | VSIX 离线安装指南 | 参考 |
 
 ## Docker 镜像
 
-| 文件 | 用途 | 大小 |
-|------|------|------|
-| `docker/Dockerfile.code-server` | VS Code + 15+ 预装插件 | ~600MB |
-| `docker/Dockerfile.claude` | Claude Code 服务 | ~300MB |
-| `docker/Dockerfile.embedded` | 完整软件工程工具链 | ~3GB |
-| `docker/docker-compose.yml` | 服务编排 | - |
+| 文件 | 用途 | 实测大小 |
+|------|------|----------|
+| `docker/Dockerfile.code-server` | VS Code + Claude Code CLI + ARM 工具链 + 15+ 扩展 | ~4GB |
+| `docker/Dockerfile.embedded` | 完整重型工具链（QEMU、Rust、Unity Test 等） | ~3GB |
+| `docker/docker-compose.yml` | 服务编排（3 个服务：gateway、code-server、embedded-dev、filebrowser） | - |
 
 ## 脚本
 
 | 文件 | 用途 |
 |------|------|
-| `scripts/manage.sh` | 环境管理（构建/启动/配置） |
+| `scripts/manage.sh` | Linux/macOS 环境管理脚本 |
+| `scripts/manage.ps1` | Windows PowerShell 环境管理脚本 |
+| `scripts/code-server-entrypoint.sh` | code-server 容器启动脚本（配置 Claude Code 后启动 code-server） |
 
 ## 文档
 
@@ -36,47 +37,44 @@
 | `QUICKSTART.md` | 快速参考 |
 | `CONFIGURATION.md` | API 配置详细指南 |
 | `MANIFEST.md` | 本文件 |
+| `EXTENSIONS.md` | VS Code 扩展说明 |
+| `docker-build-test-report.md` | Docker 构建测试报告 |
+
+## 其他
+
+| 文件 | 用途 |
+|------|------|
+| `.gitattributes` | 强制 `.sh` 文件使用 LF 行尾，防止 Windows CRLF 破坏 Linux 脚本 |
+| `.gitignore` | Git 忽略规则（排除 `.env`、镜像、证书等） |
+| `.dockerignore` | Docker 构建上下文忽略规则 |
 
 ## 目录
 
 | 目录 | 用途 | 持久化 |
 |------|------|--------|
-| `workspace/` | 代码工作区 | ✅ 是 |
-| `models/` | Ollama 模型（如需要） | ✅ 是 |
-| `configs/vsix/` | VS Code 扩展离线安装包 | ⚠️ 构建时需要 |
-| `images/` | 离线镜像存储 | ❌ 可删除 |
-| `logs/` | 日志文件 | ❌ 可删除 |
-| `.secrets/` | 敏感信息存储 | ✅ 是（不提交git） |
-
-## 构建产物
-
-| 文件 | 生成方式 | 用途 |
-|------|----------|------|
-| `images/*.tar` | `./scripts/manage.sh save` | 离线部署 |
-| `images.tar.gz` | 手动打包 | 离线部署包 |
-| `ssl/server.crt` | `./scripts/manage.sh ssl` | HTTPS 证书 |
-| `ssl/server.key` | `./scripts/manage.sh ssl` | HTTPS 私钥 |
+| `workspace/` | 代码工作区（所有容器共享） | 是 |
+| `configs/vsix/` | VS Code 扩展离线安装包 | 构建时需要 |
+| `images/` | 离线镜像存储（`save` 命令产生） | 可删除 |
+| `logs/` | Nginx 日志 | 可删除 |
 
 ---
 
 ## 首次部署检查清单
 
 - [ ] 复制 `docker/.env.example` 为 `docker/.env`
-- [ ] 编辑 `docker/.env` 配置内网 API
-- [ ] 运行 `./scripts/manage.sh ssl` 生成证书
-- [ ] 运行 `./scripts/manage.sh test-api` 测试 API
-- [ ] 运行 `./scripts/manage.sh build` 构建镜像
-- [ ] 运行 `./scripts/manage.sh up` 启动服务
-- [ ] 访问 https://localhost:8443/ 验证
+- [ ] 编辑 `docker/.env` 配置 `ANTHROPIC_API_KEY` 或 `ANTHROPIC_BASE_URL`
+- [ ] 运行 `build` 构建镜像（需要网络）
+- [ ] 运行 `up` 启动服务（自动生成 SSL）
+- [ ] 访问 https://localhost:8443/ 输入密码
+- [ ] 在 VS Code 终端运行 `claude` 验证 Claude Code
 
 ---
 
 ## 离线部署检查清单
 
-- [ ] 在外网运行 `./scripts/manage.sh save`
-- [ ] 打包 `tar czvf dev-env.tar.gz agentic-dev-env/`
-- [ ] 传输到内网
-- [ ] 内网解压 `tar xzvf dev-env.tar.gz`
-- [ ] 编辑配置 `docker/.env`
-- [ ] 运行 `./scripts/manage.sh load`
-- [ ] 运行 `./scripts/manage.sh up`
+- [ ] 外网：`build` + `save` 导出镜像
+- [ ] 外网（可选）：下载 VSIX 扩展放入 `configs/vsix/`
+- [ ] 打包传输到内网
+- [ ] 内网：编辑 `docker/.env` 配置内网代理
+- [ ] 内网：`load` 加载镜像
+- [ ] 内网：`up` 启动服务
