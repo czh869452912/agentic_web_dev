@@ -38,6 +38,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.code-server
+    image: code-server-custom:latest
     container_name: code-server
     hostname: code-server
     environment:
@@ -71,6 +72,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.embedded
+    image: embedded-dev-env:latest
     container_name: embedded-dev
     hostname: embedded-dev
     volumes:
@@ -85,8 +87,8 @@ services:
     stdin_open: true
     tty: true
     command: /bin/bash -c "tail -f /dev/null"
-    devices:
-      - /dev/bus/usb:/dev/bus/usb
+    # devices:                          # Linux only — uncomment on Linux host for USB pass-through
+    #   - /dev/bus/usb:/dev/bus/usb
 
   # ==========================================================
   # 4. 文件浏览器（通过 /files/ 访问）
