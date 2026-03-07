@@ -10,10 +10,11 @@ set -e
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# 项目根目录
-PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
+# 路径（脚本在 scripts/ 下，项目根是上一级）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 DOCKER_DIR="$PROJECT_ROOT/docker"
 
 echo "=========================================="
@@ -27,13 +28,18 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-# 检查 Docker Compose 是否安装
-if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
-    echo -e "${RED}错误: Docker Compose 未安装${NC}"
+# 支持 docker compose (v2) 和 docker-compose (v1)
+if docker compose version &> /dev/null 2>&1; then
+    DOCKER_COMPOSE="docker compose"
+elif command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE="docker-compose"
+else
+    echo -e "${RED}错误: 未找到 docker compose 或 docker-compose${NC}"
     exit 1
 fi
 
 echo -e "${GREEN}✓ Docker 版本:${NC} $(docker --version)"
+echo -e "${GREEN}✓ Compose 命令:${NC} $DOCKER_COMPOSE"
 echo ""
 
 # 测试构建函数
@@ -63,41 +69,31 @@ test_build() {
 # 记录失败数
 FAILED=0
 
-# 1. 测试 Claude Code 镜像
+# 1. 测试 code-server + Claude Code 镜像（build context 必须是项目根，包含 configs/）
 echo "------------------------------------------"
 if ! test_build \
-    "Claude Code" \
-    "$DOCKER_DIR/Dockerfile.claude" \
-    "$DOCKER_DIR" \
-    "agentic-dev-env/claude:latest"; then
-    ((FAILED++))
-fi
-
-# 2. 测试 Code Server 镜像
-echo "------------------------------------------"
-if ! test_build \
-    "Code Server" \
+    "code-server + Claude Code" \
     "$DOCKER_DIR/Dockerfile.code-server" \
     "$PROJECT_ROOT" \
-    "agentic-dev-env/code-server:latest"; then
+    "code-server-custom:latest"; then
     ((FAILED++))
 fi
 
-# 3. 测试 Embedded Dev 镜像
+# 2. 测试嵌入式开发环境镜像
 echo "------------------------------------------"
 if ! test_build \
-    "Embedded Dev" \
+    "embedded-dev" \
     "$DOCKER_DIR/Dockerfile.embedded" \
-    "$DOCKER_DIR" \
-    "agentic-dev-env/embedded:latest"; then
+    "$PROJECT_ROOT" \
+    "embedded-dev-env:latest"; then
     ((FAILED++))
 fi
 
-# 4. 测试 docker-compose 配置
+# 3. 测试 docker-compose 配置有效性
 echo "------------------------------------------"
 echo -e "${YELLOW}测试 docker-compose 配置...${NC}"
 cd "$DOCKER_DIR"
-if docker-compose config > /dev/null 2>&1; then
+if $DOCKER_COMPOSE config > /dev/null 2>&1; then
     echo -e "${GREEN}✓ docker-compose.yml 配置有效${NC}"
 else
     echo -e "${RED}✗ docker-compose.yml 配置无效${NC}"
@@ -113,7 +109,7 @@ if [ $FAILED -eq 0 ]; then
     echo -e "${GREEN}所有测试通过！${NC}"
     echo ""
     echo "构建的镜像:"
-    docker images | grep "agentic-dev-env" || true
+    docker images | grep -E "code-server-custom|embedded-dev-env" || true
     exit 0
 else
     echo -e "${RED}有 $FAILED 个测试失败${NC}"
