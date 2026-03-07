@@ -374,7 +374,6 @@ save_images() {
     
     declare -a images=(
         "nginx:alpine"
-        "codercom/code-server:latest"
         "filebrowser/filebrowser:latest"
         "code-server-custom:latest"
     )

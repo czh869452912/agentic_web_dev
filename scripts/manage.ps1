@@ -296,7 +296,11 @@ function Invoke-Save {
     Assert-Docker
     $imgDir = Join-Path $ProjectRoot "images"
     New-Item -ItemType Directory -Path $imgDir -Force | Out-Null
-    @(Get-BaseImages) + @("code-server-custom:latest") | ForEach-Object {
+    $composeFile  = Join-Path $DockerDir "docker-compose.yml"
+    $composeLines = Get-Content $composeFile
+    $nginxImg = ($composeLines | Select-String "image:\s*(nginx\S+)"    ).Matches[0].Groups[1].Value
+    $fbImg    = ($composeLines | Select-String "image:\s*(filebrowser\S+)").Matches[0].Groups[1].Value
+    @($nginxImg, $fbImg, "code-server-custom:latest") | ForEach-Object {
         $fname = ($_ -replace "[:/]","_") + ".tar"
         $fpath = Join-Path $imgDir $fname
         Write-Info "  保存 $_ -> $fname"
