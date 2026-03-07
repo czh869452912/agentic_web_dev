@@ -285,24 +285,48 @@ CONFIG
 }
 
 gen_ssl() {
-    echo -e "${YELLOW}[1/1] 生成自签名 SSL 证书...${NC}"
-    
+    echo -e "${YELLOW}[1/1] 生成自签名 SSL 证书（含 SAN，支持 localhost）...${NC}"
+
     SSL_DIR="$CONFIGS_DIR/ssl"
     mkdir -p "$SSL_DIR"
-    
-    openssl genrsa -out "$SSL_DIR/server.key" 2048 2>/dev/null
-    openssl req -new \
-        -key "$SSL_DIR/server.key" \
-        -out "$SSL_DIR/server.csr" \
-        -subj "/C=CN/ST=Beijing/L=Beijing/O=DevOps/OU=Development/CN=dev-server.local" 2>/dev/null
-    openssl x509 -req \
-        -days 365 \
-        -in "$SSL_DIR/server.csr" \
-        -signkey "$SSL_DIR/server.key" \
-        -out "$SSL_DIR/server.crt" 2>/dev/null
-    rm "$SSL_DIR/server.csr"
-    
+
+    # 写入含 SAN 的配置（浏览器 / Service Worker 需要 SAN，仅 CN 不够）
+    cat > "$SSL_DIR/openssl.cnf" <<'EOF'
+[req]
+default_bits       = 2048
+prompt             = no
+default_md         = sha256
+distinguished_name = dn
+x509_extensions    = v3_req
+
+[dn]
+C  = CN
+ST = Beijing
+L  = Beijing
+O  = DevOps
+CN = localhost
+
+[v3_req]
+subjectAltName      = @alt_names
+keyUsage            = critical, digitalSignature, keyEncipherment
+extendedKeyUsage    = serverAuth
+basicConstraints    = CA:FALSE
+
+[alt_names]
+DNS.1 = localhost
+DNS.2 = dev-server.local
+IP.1  = 127.0.0.1
+EOF
+
+    openssl req -x509 -newkey rsa:2048 -sha256 -days 825 -nodes \
+        -keyout "$SSL_DIR/server.key" \
+        -out    "$SSL_DIR/server.crt" \
+        -config "$SSL_DIR/openssl.cnf" 2>/dev/null
+    rm "$SSL_DIR/openssl.cnf"
+
     echo -e "${GREEN}✓ SSL 证书已生成: $SSL_DIR/${NC}"
+    echo -e "${YELLOW}  提示: 首次访问时浏览器仍会提示不安全，点击「高级」->「继续访问」即可${NC}"
+    echo -e "${YELLOW}  或将 $SSL_DIR/server.crt 导入系统信任存储以彻底消除警告${NC}"
 }
 
 pull_images() {

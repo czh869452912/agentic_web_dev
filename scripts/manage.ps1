@@ -108,7 +108,7 @@ ANTHROPIC_BASE_URL=
 }
 
 function Invoke-GenSSL {
-    Write-Info "生成自签名 SSL 证书..."
+    Write-Info "生成自签名 SSL 证书（含 SAN，支持 localhost）..."
     $sslDir = Join-Path $ConfigsDir "ssl"
     New-Item -ItemType Directory -Path $sslDir -Force | Out-Null
 
@@ -121,34 +121,88 @@ function Invoke-GenSSL {
     }
 
     if ($opensslCmd) {
+        # 写入含 SAN 的 openssl 配置（浏览器 / Service Worker 需要 SAN）
+        $opensslConf = @"
+[req]
+default_bits       = 2048
+prompt             = no
+default_md         = sha256
+distinguished_name = dn
+x509_extensions    = v3_req
+
+[dn]
+C  = CN
+ST = Beijing
+L  = Beijing
+O  = DevOps
+CN = localhost
+
+[v3_req]
+subjectAltName      = @alt_names
+keyUsage            = critical, digitalSignature, keyEncipherment
+extendedKeyUsage    = serverAuth
+basicConstraints    = CA:FALSE
+
+[alt_names]
+DNS.1 = localhost
+DNS.2 = dev-server.local
+IP.1  = 127.0.0.1
+"@
+        $confPath = "$sslDir\openssl.cnf"
+        Set-Content -Path $confPath -Value $opensslConf -Encoding ASCII
+
         # openssl 会往 stderr 写信息性消息；临时改为 Continue 避免 Stop 误报
         $savedEAP = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
-        & $opensslCmd genrsa -out "$sslDir\server.key" 2048 2>$null
-        & $opensslCmd req -new -key "$sslDir\server.key" -out "$sslDir\server.csr" `
-            -subj "/C=CN/ST=Beijing/L=Beijing/O=DevOps/CN=dev-server.local" 2>$null
-        & $opensslCmd x509 -req -days 365 `
-            -in "$sslDir\server.csr" `
-            -signkey "$sslDir\server.key" `
-            -out "$sslDir\server.crt" 2>$null
+        & $opensslCmd req -x509 -newkey rsa:2048 -sha256 -days 825 -nodes `
+            -keyout "$sslDir\server.key" `
+            -out    "$sslDir\server.crt" `
+            -config $confPath 2>$null
+        $exitCode = $LASTEXITCODE
         $ErrorActionPreference = $savedEAP
-        if ($LASTEXITCODE -ne 0) { Write-Fail "openssl x509 failed (exit $LASTEXITCODE)"; exit 1 }
-        Remove-Item "$sslDir\server.csr" -ErrorAction SilentlyContinue
+        Remove-Item $confPath -ErrorAction SilentlyContinue
+
+        if ($exitCode -ne 0) { Write-Fail "openssl req -x509 failed (exit $exitCode)"; exit 1 }
         Write-OK "SSL 证书已生成到 $sslDir"
     } else {
         # 回退：用 PowerShell 内置证书（仅 Windows）
         Write-Warn "未找到 openssl，使用 PowerShell New-SelfSignedCertificate..."
         $cert = New-SelfSignedCertificate `
-            -DnsName "dev-server.local","localhost" `
+            -DnsName "localhost","dev-server.local" `
             -CertStoreLocation "Cert:\LocalMachine\My" `
-            -NotAfter (Get-Date).AddYears(1)
+            -NotAfter (Get-Date).AddYears(1) `
+            -KeyAlgorithm RSA -KeyLength 2048 `
+            -HashAlgorithm SHA256 `
+            -KeyUsage DigitalSignature,KeyEncipherment `
+            -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.1")
 
         # 导出 PFX -> 再拆分为 PEM（需要 openssl，仅作提示）
         $pfxPath = "$sslDir\server.pfx"
-        $pwd = ConvertTo-SecureString "devenv" -AsPlainText -Force
-        Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $pwd | Out-Null
+        $pfxPwd = ConvertTo-SecureString "devenv" -AsPlainText -Force
+        Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $pfxPwd | Out-Null
         Write-Warn "已生成 PFX: $pfxPath"
-        Write-Warn "Please convert to server.key / server.crt manually with openssl, or install Git for Windows and retry"
+        Write-Warn "请安装 Git for Windows（含 openssl）后重新运行 ssl 命令以生成 PEM 格式证书"
+        return
+    }
+
+    # ── 将证书导入 Windows 受信任根，浏览器 / Service Worker 才能信任 ──
+    Write-Info "将证书导入 Windows 受信任根证书存储（需要管理员权限）..."
+    try {
+        $certObj = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(
+            (Resolve-Path "$sslDir\server.crt").Path
+        )
+        $store = New-Object System.Security.Cryptography.X509Certificates.X509Store(
+            [System.Security.Cryptography.X509Certificates.StoreName]::Root,
+            [System.Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine
+        )
+        $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+        $store.Add($certObj)
+        $store.Close()
+        Write-OK "证书已导入受信任根存储 —— 浏览器无需手动确认"
+    } catch {
+        Write-Warn "导入受信任根失败（$($_.Exception.Message)）"
+        Write-Warn "请以管理员身份重新运行，或手动将 $sslDir\server.crt 导入到"
+        Write-Warn "'证书 -> 受信任的根证书颁发机构 -> 证书'"
     }
 }
 
