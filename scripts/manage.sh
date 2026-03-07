@@ -32,8 +32,7 @@ usage() {
     echo ""
     echo "命令:"
     echo "  init              初始化环境（创建 .env 文件）"
-    echo "  config            配置内网 LLM API"
-    echo "  test-api          测试 LLM API 连接"
+    echo "  test-api          测试 Anthropic API 连接"
     echo "  build             构建所有 Docker 镜像"
     echo "  pull              拉取基础镜像"
     echo "  save              保存镜像到 images/ 目录"
@@ -68,10 +67,8 @@ check_deps() {
 
 init_dirs() {
     mkdir -p "$PROJECT_ROOT/images"
-    mkdir -p "$PROJECT_ROOT/models"
     mkdir -p "$PROJECT_ROOT/logs/nginx"
     mkdir -p "$PROJECT_ROOT/workspace"
-    mkdir -p "$PROJECT_ROOT/.secrets"
     mkdir -p "$CONFIGS_DIR/ssl"
 }
 
@@ -111,140 +108,43 @@ EOF
     echo -e "${YELLOW}请编辑该文件配置您的内网 LLM API${NC}"
 }
 
-# 交互式配置 LLM API
-config_api() {
-    echo -e "${BLUE}配置内网 LLM API${NC}"
-    echo ""
-    
-    # 读取现有配置
-    if [ -f "$ENV_FILE" ]; then
-        source "$ENV_FILE"
-    fi
-    
-    echo -e "${YELLOW}请输入内网 LLM API 配置:${NC}"
-    echo ""
-    
-    read -p "API URL [${LLM_API_URL:-http://localhost:8000/v1}]: " api_url
-    api_url=${api_url:-${LLM_API_URL:-http://localhost:8000/v1}}
-    
-    read -p "API Key [${LLM_API_KEY:-}]: " api_key
-    api_key=${api_key:-${LLM_API_KEY:-}}
-    
-    read -p "Model [${LLM_MODEL:-gpt-4}]: " model
-    model=${model:-${LLM_MODEL:-gpt-4}}
-    
-    read -p "API 服务器 IP (可选，用于 hosts 解析): " api_ip
-    
-    # 更新配置文件
-    cat > "$ENV_FILE" << EOF
-# ========================================
-# 基础服务配置
-# ========================================
-GATEWAY_PORT=${GATEWAY_PORT:-8443}
-CODE_SERVER_PASSWORD=${CODE_SERVER_PASSWORD:-changeme}
-SUDO_PASSWORD=${SUDO_PASSWORD:-changeme}
-
-# ========================================
-# 内网大模型 API 配置
-# ========================================
-LLM_API_URL=$api_url
-LLM_API_KEY=$api_key
-LLM_MODEL=$model
-EOF
-    
-    if [ -n "$api_ip" ]; then
-        echo "LLM_HOST_IP=$api_ip" >> "$ENV_FILE"
-    fi
-    
-    echo "" >> "$ENV_FILE"
-    echo "# ========================================" >> "$ENV_FILE"
-    echo "# Claude Code 配置" >> "$ENV_FILE"
-    echo "# ========================================" >> "$ENV_FILE"
-    echo "CLAUDE_CODE_MODEL=$model" >> "$ENV_FILE"
-    
-    echo ""
-    echo -e "${GREEN}✓ 配置已保存${NC}"
-    echo ""
-    echo -e "${BLUE}配置内容:${NC}"
-    grep -E "^(LLM|CODE)" "$ENV_FILE" | grep -v PASSWORD || true
-}
-
-# 测试 API 连接
+# 测试 Anthropic API 连接
 test_api() {
-    echo -e "${YELLOW}测试 LLM API 连接...${NC}"
-    
+    echo -e "${YELLOW}测试 Anthropic API 连接...${NC}"
+
     if [ ! -f "$ENV_FILE" ]; then
         echo -e "${RED}错误: 配置文件不存在，请先运行 init${NC}"
         exit 1
     fi
-    
+
     source "$ENV_FILE"
-    
-    if [ -z "$LLM_API_URL" ]; then
-        echo -e "${RED}错误: LLM_API_URL 未配置${NC}"
+
+    if [ -z "$ANTHROPIC_API_KEY" ]; then
+        echo -e "${RED}错误: ANTHROPIC_API_KEY 未配置${NC}"
         exit 1
     fi
-    
-    echo -e "${BLUE}API URL: $LLM_API_URL${NC}"
-    echo -e "${BLUE}Model: $LLM_MODEL${NC}"
+
+    local base_url="${ANTHROPIC_BASE_URL:-https://api.anthropic.com}"
+    echo -e "${BLUE}API URL: $base_url${NC}"
     echo ""
-    
-    # 测试连接
-    echo -e "${YELLOW}测试 API 连通性...${NC}"
-    
-    # 尝试获取模型列表（OpenAI 兼容 API）
-    if curl -s --connect-timeout 10 "$LLM_API_URL/models" > /dev/null 2>&1; then
-        echo -e "${GREEN}✓ API 连接成功${NC}"
+
+    echo -e "${YELLOW}测试 /v1/messages 连通性...${NC}"
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 \
+        -X POST "$base_url/v1/messages" \
+        -H "x-api-key: $ANTHROPIC_API_KEY" \
+        -H "anthropic-version: 2023-06-01" \
+        -H "content-type: application/json" \
+        -d '{"model":"claude-haiku-4-5-20251001","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}' \
+        2>/dev/null || echo "000")
+
+    if [ "$http_code" = "200" ]; then
+        echo -e "${GREEN}✓ API 连接并认证成功${NC}"
+    elif [ "$http_code" = "401" ]; then
+        echo -e "${RED}✗ API Key 无效（401）${NC}"
+    elif [ "$http_code" = "000" ]; then
+        echo -e "${RED}✗ 无法连接到 $base_url（网络不可达或超时）${NC}"
     else
-        echo -e "${RED}✗ API 连接失败${NC}"
-        echo ""
-        echo -e "${YELLOW}可能的原因:${NC}"
-        echo "  1. API URL 配置错误"
-        echo "  2. 网络不可达（检查防火墙/VPN）"
-        echo "  3. API 服务未启动"
-        echo ""
-        return 1
-    fi
-    
-    # 测试认证（如果配置了 API Key）
-    if [ -n "$LLM_API_KEY" ]; then
-        echo -e "${YELLOW}测试 API 认证...${NC}"
-        
-        http_code=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: Bearer $LLM_API_KEY" \
-            "$LLM_API_URL/models" 2>/dev/null || echo "000")
-        
-        if [ "$http_code" = "200" ]; then
-            echo -e "${GREEN}✓ API 认证成功${NC}"
-        elif [ "$http_code" = "401" ]; then
-            echo -e "${RED}✗ API Key 认证失败${NC}"
-        else
-            echo -e "${YELLOW}? API 返回状态码: $http_code${NC}"
-        fi
-    fi
-    
-    # 测试简单生成
-    echo ""
-    echo -e "${YELLOW}测试模型生成...${NC}"
-    
-    response=$(curl -s -X POST "$LLM_API_URL/chat/completions" \
-        -H "Content-Type: application/json" \
-        ${LLM_API_KEY:+-H "Authorization: Bearer $LLM_API_KEY"} \
-        -d "{
-            \"model\": \"$LLM_MODEL\",
-            \"messages\": [{\"role\": \"user\", \"content\": \"Say 'API test successful'\"}],
-            \"max_tokens\": 20
-        }" 2>/dev/null || echo "")
-    
-    if [ -n "$response" ] && echo "$response" | grep -q "content"; then
-        echo -e "${GREEN}✓ 模型生成测试成功${NC}"
-        echo ""
-        echo -e "${BLUE}响应预览:${NC}"
-        echo "$response" | head -c 200
-        echo "..."
-    else
-        echo -e "${RED}✗ 模型生成测试失败${NC}"
-        echo "响应: $response"
+        echo -e "${YELLOW}? API 返回状态码: $http_code${NC}"
     fi
 }
 
@@ -368,23 +268,28 @@ build_images() {
 
 save_images() {
     echo -e "${YELLOW}保存镜像...${NC}"
-    
+
     mkdir -p "$PROJECT_ROOT/images"
     cd "$PROJECT_ROOT/images"
-    
-    declare -a images=(
-        "nginx:alpine"
-        "filebrowser/filebrowser:latest"
-        "code-server-custom:latest"
-    )
-    
+
+    # 从 docker-compose.yml 动态读取版本，保持与实际部署一致
+    local compose_file="$DOCKER_DIR/docker-compose.yml"
+    local nginx_img fb_img
+    nginx_img=$(grep -E 'image:\s*nginx' "$compose_file" | awk '{print $2}' | head -1)
+    fb_img=$(grep -E 'image:\s*filebrowser' "$compose_file" | awk '{print $2}' | head -1)
+
+    local images=("$nginx_img" "$fb_img" "code-server-custom:latest")
+
     for img in "${images[@]}"; do
+        local filename
         filename=$(echo "$img" | tr '/:' '_').tar
-        echo -e "  保存 $img → $filename"
+        echo -e "  保存 $img → $filename（docker save 无进度条，请耐心等待...）"
         docker save "$img" > "$filename"
+        local size_mb=$(( $(stat -c%s "$filename" 2>/dev/null || stat -f%z "$filename") / 1048576 ))
+        echo -e "  ${GREEN}✓ 已保存 ${size_mb} MB${NC}"
     done
-    
-    echo -e "${GREEN}✓ 镜像已保存${NC}"
+
+    echo -e "${GREEN}✓ 所有镜像已保存至 $PROJECT_ROOT/images/${NC}"
 }
 
 load_images() {
@@ -493,9 +398,6 @@ main() {
     case "${1:-}" in
         init)
             init_config
-            ;;
-        config)
-            config_api
             ;;
         test-api)
             test_api
