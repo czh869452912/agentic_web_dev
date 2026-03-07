@@ -103,22 +103,40 @@ ENV CODE_SERVER_EXTENSIONS_SEED=/opt/code-server-extensions-seed
 
 RUN mkdir -p ${CODE_SERVER_EXTENSIONS_SEED}
 
-RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension ms-vscode.cpptools-extension-pack
-RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension marus25.cortex-debug
-RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension dan-c-underwood.arm
-RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension zixuanwang.linkerscript
-RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension jbenden.c-cpp-flylint
-RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension xaver.clang-format
-RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension notskm.clang-tidy
-RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension cschlosser.doxdocgen
-RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension ms-vscode.cmake-tools
-RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension twxs.cmake
-RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension eamodio.gitlens
-RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension mhutchie.git-graph
-RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension pkief.material-icon-theme
-RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension streetsidesoftware.code-spell-checker
-RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension usernamehw.errorlens
-RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension christian-kohler.path-intellisense
+# clangd C/C++ support (Open VSX; replaces ms-vscode.cpptools-extension-pack which is MS-only)
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension llvm-vs-code-extensions.vscode-clangd \
+    || echo "[WARN] vscode-clangd not available, skipping"
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension marus25.cortex-debug \
+    || echo "[WARN] cortex-debug not available, skipping"
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension dan-c-underwood.arm \
+    || echo "[WARN] arm extension not available, skipping"
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension zixuanwang.linkerscript \
+    || echo "[WARN] linkerscript extension not available, skipping"
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension jbenden.c-cpp-flylint \
+    || echo "[WARN] c-cpp-flylint not available, skipping"
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension xaver.clang-format \
+    || echo "[WARN] clang-format extension not available, skipping"
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension notskm.clang-tidy \
+    || echo "[WARN] clang-tidy extension not available, skipping"
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension cschlosser.doxdocgen \
+    || echo "[WARN] doxdocgen not available, skipping"
+# ms-vscode.cmake-tools is MS-only; twxs.cmake provides CMake syntax highlighting on Open VSX
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension ms-vscode.cmake-tools \
+    || echo "[WARN] cmake-tools not available on Open VSX, skipping"
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension twxs.cmake \
+    || echo "[WARN] twxs.cmake not available, skipping"
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension eamodio.gitlens \
+    || echo "[WARN] gitlens not available, skipping"
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension mhutchie.git-graph \
+    || echo "[WARN] git-graph not available, skipping"
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension pkief.material-icon-theme \
+    || echo "[WARN] material-icon-theme not available, skipping"
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension streetsidesoftware.code-spell-checker \
+    || echo "[WARN] code-spell-checker not available, skipping"
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension usernamehw.errorlens \
+    || echo "[WARN] errorlens not available, skipping"
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension christian-kohler.path-intellisense \
+    || echo "[WARN] path-intellisense not available, skipping"
 
 # Claude Code 官方扩展（在线时安装，离线时跳过）
 RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension anthropic.claude-code \
