@@ -314,7 +314,8 @@ function Invoke-Load {
     $imgDir = Join-Path $ProjectRoot "images"
     if (-not (Test-Path $imgDir)) { Write-Fail "images\ directory does not exist"; exit 1 }
     Get-ChildItem "$imgDir\*.tar" | ForEach-Object {
-        Write-Info "  加载 $($_.Name)"
+        $sizeMB = [math]::Round($_.Length / 1MB)
+        Write-Info "  加载 $($_.Name) (${sizeMB} MB)，docker load 无进度条，大镜像请耐心等待..."
         docker load -i $_.FullName
     }
     Write-OK "镜像加载完成"

@@ -398,7 +398,8 @@ load_images() {
     cd "$PROJECT_ROOT/images"
     for tarfile in *.tar; do
         if [ -f "$tarfile" ]; then
-            echo -e "  加载 $tarfile"
+            size_mb=$(( $(stat -c%s "$tarfile" 2>/dev/null || stat -f%z "$tarfile") / 1048576 ))
+            echo -e "  加载 $tarfile (${size_mb} MB)，docker load 无进度条，大镜像请耐心等待..."
             docker load < "$tarfile"
         fi
     done
