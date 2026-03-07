@@ -67,7 +67,6 @@ function Initialize-Dirs {
 function Get-BaseImages {
     $composeFile  = Join-Path $DockerDir "docker-compose.yml"
     $csDockerfile = Join-Path $DockerDir "Dockerfile.code-server"
-    $emDockerfile = Join-Path $DockerDir "Dockerfile.embedded"
 
     $composeLines = Get-Content $composeFile
 
@@ -77,9 +76,8 @@ function Get-BaseImages {
 
     # Dockerfile 中的 FROM 行（第一行）
     $csImg = ((Get-Content $csDockerfile | Select-String "^FROM\s+(\S+)")[0]).Matches[0].Groups[1].Value
-    $emImg = ((Get-Content $emDockerfile | Select-String "^FROM\s+(\S+)")[0]).Matches[0].Groups[1].Value
 
-    return @($nginxImg, $csImg, $fbImg, $emImg)
+    return @($nginxImg, $csImg, $fbImg)
 }
 
 # ---- 命令函数 ----
@@ -208,23 +206,15 @@ IP.1  = 127.0.0.1
 
 function Invoke-Build {
     Assert-Docker
-    Write-Info "构建镜像..."
+    Write-Info "构建 code-server + Claude Code + 嵌入式工具链（build context: 项目根目录）"
 
-    Write-Info "[1/2] 构建 code-server + Claude Code（build context: 项目根目录）"
     docker build `
         -f "$DockerDir\Dockerfile.code-server" `
         -t "code-server-custom:latest" `
         $ProjectRoot
     if ($LASTEXITCODE -ne 0) { Write-Fail "code-server 镜像构建失败"; exit 1 }
 
-    Write-Info "[2/2] Build embedded-dev (full toolchain)"
-    docker build `
-        -f "$DockerDir\Dockerfile.embedded" `
-        -t "embedded-dev-env:latest" `
-        $ProjectRoot
-    if ($LASTEXITCODE -ne 0) { Write-Fail "embedded-dev 镜像构建失败"; exit 1 }
-
-    Write-OK "All images built"
+    Write-OK "镜像构建完成"
 }
 
 function Invoke-Pull {
@@ -306,7 +296,7 @@ function Invoke-Save {
     Assert-Docker
     $imgDir = Join-Path $ProjectRoot "images"
     New-Item -ItemType Directory -Path $imgDir -Force | Out-Null
-    @(Get-BaseImages) + @("code-server-custom:latest","embedded-dev-env:latest") | ForEach-Object {
+    @(Get-BaseImages) + @("code-server-custom:latest") | ForEach-Object {
         $fname = ($_ -replace "[:/]","_") + ".tar"
         $fpath = Join-Path $imgDir $fname
         Write-Info "  保存 $_ -> $fname"
@@ -340,7 +330,7 @@ function Show-Help {
   down          停止所有服务
   status        查看服务状态
   logs [svc]    查看日志（可指定服务名）
-  shell <svc>   进入服务 shell（code-server / embedded-dev）
+  shell <svc>   进入服务 shell（code-server / filebrowser）
   save          保存镜像到 images\
   load          从 images\ 加载镜像
 

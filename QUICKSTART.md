@@ -15,8 +15,7 @@
 ./scripts/manage.sh down
 
 # 进入容器
-./scripts/manage.sh shell code-server    # VS Code + Claude Code 容器
-./scripts/manage.sh shell embedded-dev  # 重型工具链容器
+./scripts/manage.sh shell code-server    # VS Code + Claude Code + 嵌入式工具链
 ```
 
 ### Windows (PowerShell)
@@ -119,24 +118,28 @@ arm-objdump firmware.elf  # 别名
 # 文档生成
 doxygen Doxyfile
 
-# probe-rs（嵌入式调试/烧录，Rust工具链）
-probe-rs list           # 列出连接的调试器
-probe-rs download --chip STM32F4 firmware.elf
-```
+# 固件调试
+openocd -f interface/stlink.cfg -f target/stm32f4x.cfg
+flash-openocd           # 别名
+pyocd list              # 列出调试器
+flash-pyocd             # 别名
 
----
+# ESP32/ESP8266 烧录
+esptool.py --port /dev/ttyUSB0 write_flash 0x0 firmware.bin
+esp-flash               # 别名
 
-## 访问 embedded-dev 容器（重型工具）
+# ARM 仿真
+qemu-arm-static ./arm-binary
+qemu-arm                # 别名
+qemu-system-arm -M stm32-p103 -kernel firmware.elf
 
-embedded-dev 容器运行完整工具链（QEMU、OpenOCD、Rust 等），与 code-server 共享 `/workspace`。
+# API 文档
+sphinx-quickstart && sphinx-build -b html docs/ docs/_build/
+sphinx-init             # 别名
 
-```bash
-# 从宿主机进入
-docker exec -it embedded-dev bash
-
-# 或通过 manage 脚本
-./scripts/manage.sh shell embedded-dev   # Linux
-.\scripts\manage.ps1 shell embedded-dev  # Windows
+# 构建系统 / 包管理
+scons
+conan install .
 ```
 
 ---

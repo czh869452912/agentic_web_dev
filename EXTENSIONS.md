@@ -35,7 +35,7 @@
 | `ryanluker.vscode-coverage-gutters` | Coverage Gutters | 内联显示 lcov/gcovr 覆盖率（行级高亮） |
 | `hbenl.vscode-test-explorer` | Test Explorer UI | 统一测试运行侧边栏 |
 
-> **C 测试工具**：容器内预装 `check`（libcheck）、`libcmocka-dev`、`libcunit1-dev`、`ceedling`（含 Unity/CMock）。
+> **C/C++ 测试工具**：容器内预装 `check`（libcheck）、`libcmocka-dev`、`libcunit1-dev`、`ceedling`（含 Unity/CMock）、Google Test（从 `libgtest-dev` 源码编译安装，`/usr/local/lib/libgtest*`）。
 
 ### 代码质量
 

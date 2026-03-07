@@ -17,9 +17,8 @@
 
 | 文件 | 用途 | 实测大小 |
 |------|------|----------|
-| `docker/Dockerfile.code-server` | VS Code + Claude Code CLI + ARM 工具链 + 13+ 扩展 | ~4GB |
-| `docker/Dockerfile.embedded` | 完整重型工具链（QEMU、Rust、probe-rs 等） | ~3GB |
-| `docker/docker-compose.yml` | 服务编排（4 个服务：gateway、code-server、embedded-dev、filebrowser） | - |
+| `docker/Dockerfile.code-server` | VS Code + Claude Code CLI + 完整嵌入式工具链 + 13+ 扩展 | ~5GB |
+| `docker/docker-compose.yml` | 服务编排（3 个服务：gateway、code-server、filebrowser） | - |
 
 ## 脚本
 
@@ -28,6 +27,7 @@
 | `scripts/manage.sh` | Linux/macOS 环境管理脚本 |
 | `scripts/manage.ps1` | Windows PowerShell 环境管理脚本 |
 | `scripts/code-server-entrypoint.sh` | code-server 容器启动脚本（配置 Claude Code 后启动 code-server） |
+| `scripts/test-docker-build.sh` | 镜像构建验证测试脚本 |
 
 ## 文档
 

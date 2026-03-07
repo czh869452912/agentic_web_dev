@@ -65,17 +65,35 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     python3-venv \
     openocd \
+    stlink-tools \
+    libftdi1-dev \
+    libhidapi-dev \
+    libusb-1.0-0-dev \
+    qemu-user-static \
+    qemu-system-arm \
+    qemu-system-misc \
+    binfmt-support \
     check \
     libcmocka-dev \
     libcunit1-dev \
+    libgtest-dev \
     splint \
     iwyu \
+    scons \
     ruby \
     ruby-dev \
     pandoc \
     plantuml \
     default-jre-headless \
     && rm -rf /var/lib/apt/lists/*
+
+# ============================================================
+# Google Test — 从源码编译安装
+# ============================================================
+RUN cd /usr/src/googletest \
+    && cmake . \
+    && make \
+    && make install
 
 # ============================================================
 # Python 工具
@@ -86,7 +104,17 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     pyelftools \
     meson \
     autopep8 \
-    doorstop
+    doorstop \
+    pyocd \
+    esptool \
+    pyusb \
+    pycparser \
+    cffi \
+    conan \
+    sphinx \
+    sphinx-rtd-theme \
+    breathe \
+    exhale
 
 # ============================================================
 # ARM bare-metal 工具链（arm-none-eabi）
@@ -241,7 +269,12 @@ alias sp="splint -weak"\n\
 alias iwyu="include-what-you-use"\n\
 alias scan="scan-build --use-cc=gcc"\n\
 alias ds="doorstop"\n\
-alias ceed="ceedling"\n' \
+alias ceed="ceedling"\n\
+alias qemu-arm="qemu-arm-static"\n\
+alias flash-openocd="openocd"\n\
+alias flash-pyocd="pyocd"\n\
+alias esp-flash="esptool.py"\n\
+alias sphinx-init="sphinx-quickstart"\n' \
     > /etc/profile.d/embedded-dev.sh \
     && cat /etc/profile.d/embedded-dev.sh >> /etc/bash.bashrc
 

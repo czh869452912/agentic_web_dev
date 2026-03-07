@@ -31,15 +31,17 @@
        │                   ├── ARM GCC 13.2 bare-metal 工具链
        │                   ├── clang / clang-format / clang-tidy
        │                   ├── cppcheck / valgrind / lcov / gcovr
-       │                   ├── gdb-multiarch / openocd
+       │                   ├── gdb-multiarch / openocd / stlink-tools
+       │                   ├── QEMU (qemu-arm-static / qemu-system-arm)
+       │                   ├── pyocd / esptool / conan / scons
+       │                   ├── Sphinx / Breathe（API 文档生成）
+       │                   ├── Google Test / Ceedling（C/C++ 单元测试）
        │                   └── 13+ VS Code 扩展
        │
        ├── /files/    →  filebrowser（Web 文件管理）
        │
        └── /health    →  健康检查端点
 ```
-
-`embedded-dev` 容器提供完整重型工具链（QEMU、Unity Test、Rust 嵌入式、probe-rs 等），与 code-server 共享 `/workspace` 卷，可通过 `docker exec embedded-dev <cmd>` 访问。
 
 ---
 
@@ -50,8 +52,7 @@ agentic_web_dev/
 ├── .gitattributes                  # 强制 .sh 文件使用 LF 行尾
 ├── docker/
 │   ├── docker-compose.yml
-│   ├── Dockerfile.code-server      # VS Code + Claude Code + 嵌入式工具
-│   ├── Dockerfile.embedded         # 完整重型工具链（QEMU、Rust 等）
+│   ├── Dockerfile.code-server      # VS Code + Claude Code + 完整嵌入式工具链
 │   └── .env.example
 ├── configs/
 │   ├── nginx.conf
@@ -63,7 +64,8 @@ agentic_web_dev/
 ├── scripts/
 │   ├── manage.sh                   # Linux/macOS 管理脚本
 │   ├── manage.ps1                  # Windows PowerShell 管理脚本
-│   └── code-server-entrypoint.sh  # code-server 容器启动脚本
+│   ├── code-server-entrypoint.sh  # code-server 容器启动脚本
+│   └── test-docker-build.sh       # 镜像构建测试脚本
 └── workspace/                      # 代码工作区（挂载卷）
 ```
 
@@ -193,19 +195,32 @@ doxygen Doxyfile
 
 # 固件调试（通过 JTAG/SWD 连接）
 openocd -f interface/stlink.cfg -f target/stm32f4x.cfg
+flash-openocd            # 别名
+pyocd list               # 列出调试器
+flash-pyocd              # 别名
+
+# ESP32/ESP8266 固件烧录
+esptool.py --port /dev/ttyUSB0 write_flash 0x0 firmware.bin
+esp-flash                # 别名
+
+# ARM 仿真（无硬件开发板）
+qemu-arm-static ./arm-binary
+qemu-arm                 # 别名
+qemu-system-arm -M stm32-p103 -kernel firmware.elf
 
 # 查看 ELF 信息
 arm-none-eabi-size firmware.elf
 arm-none-eabi-objdump -d firmware.elf
-arm-size firmware.elf   # 别名
-```
+arm-size firmware.elf    # 别名
 
-重型工具（QEMU、Unity Test、Rust 嵌入式）在 embedded-dev 容器：
+# API 文档生成（Sphinx + Breathe）
+sphinx-quickstart
+sphinx-init              # 别名
+sphinx-build -b html docs/ docs/_build/
 
-```bash
-docker exec -it embedded-dev bash
-qemu-system-arm -M stm32-p103 -kernel firmware.elf
-```
+# 构建系统
+scons                    # SCons 构建
+conan install .          # Conan 包管理
 
 ---
 
@@ -262,7 +277,6 @@ qemu-system-arm -M stm32-p103 -kernel firmware.elf
 ./scripts/manage.sh logs          # 查看所有日志
 ./scripts/manage.sh logs code-server  # 查看指定服务日志
 ./scripts/manage.sh shell code-server     # 进入 VS Code 容器
-./scripts/manage.sh shell embedded-dev    # 进入嵌入式工具链容器
 ./scripts/manage.sh save          # 导出镜像（离线部署用）
 ./scripts/manage.sh load          # 加载镜像
 ```
@@ -498,6 +512,14 @@ docker logs dev-gateway
 ---
 
 ## 更新日志
+
+### v4.0.0 (2026-03-07)
+- 将 embedded-dev 容器工具链全部迁移进 code-server，终端直接使用所有嵌入式工具
+- 新增：QEMU (qemu-user-static / qemu-system-arm)、stlink-tools、libftdi1-dev、libhidapi-dev
+- 新增：pyocd、esptool、conan、scons、Sphinx + Breathe + Exhale、Google Test
+- 新增：pyusb、pycparser、cffi 等 Python 支持库
+- 删除：embedded-dev 服务及 Dockerfile.embedded、embedded-* 辅助脚本
+- 更新：manage.sh / test-docker-build.sh 去除 embedded-dev 相关构建/保存逻辑
 
 ### v3.2.0 (2026-03-07)
 - 修复 SSL 证书不含 SAN 导致 Service Worker 注册失败（Cline 插件 webview 不可用）

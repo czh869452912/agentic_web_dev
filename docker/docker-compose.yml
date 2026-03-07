@@ -1,6 +1,6 @@
 # ============================================================
 # 内网 Agentic 云开发环境 - Docker Compose 配置
-# 架构：Nginx 网关 → code-server（内置 Claude Code）→ 嵌入式工具链
+# 架构：Nginx 网关 → code-server（内置 Claude Code + 嵌入式工具链）
 # ============================================================
 
 services:
@@ -65,33 +65,7 @@ services:
       retries: 3
 
   # ==========================================================
-  # 3. 嵌入式开发环境（完整工具链，共享工作区）
-  # 通过 docker exec 或 SSH 从 code-server 终端访问
-  # ==========================================================
-  embedded-dev:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.embedded
-    image: embedded-dev-env:latest
-    container_name: embedded-dev
-    hostname: embedded-dev
-    volumes:
-      - ../workspace:/workspace
-      - dev-toolchains:/opt/toolchains
-    privileged: true
-    networks:
-      devnet:
-        aliases:
-          - embedded.local
-    working_dir: /workspace
-    stdin_open: true
-    tty: true
-    command: /bin/bash -c "tail -f /dev/null"
-    # devices:                          # Linux only — uncomment on Linux host for USB pass-through
-    #   - /dev/bus/usb:/dev/bus/usb
-
-  # ==========================================================
-  # 4. 文件浏览器（通过 /files/ 访问）
+  # 3. 文件浏览器（通过 /files/ 访问）
   # ==========================================================
   filebrowser:
     image: filebrowser/filebrowser:v2.27.0
@@ -122,5 +96,4 @@ volumes:
   code-extensions:
   code-config:
   claude-config:
-  dev-toolchains:
   filebrowser-db:

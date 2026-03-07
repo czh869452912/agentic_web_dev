@@ -79,17 +79,7 @@ if ! test_build \
     ((FAILED++))
 fi
 
-# 2. 测试嵌入式开发环境镜像
-echo "------------------------------------------"
-if ! test_build \
-    "embedded-dev" \
-    "$DOCKER_DIR/Dockerfile.embedded" \
-    "$PROJECT_ROOT" \
-    "embedded-dev-env:latest"; then
-    ((FAILED++))
-fi
-
-# 3. 测试 docker-compose 配置有效性
+# 2. 测试 docker-compose 配置有效性
 echo "------------------------------------------"
 echo -e "${YELLOW}测试 docker-compose 配置...${NC}"
 cd "$DOCKER_DIR"
@@ -109,7 +99,7 @@ if [ $FAILED -eq 0 ]; then
     echo -e "${GREEN}所有测试通过！${NC}"
     echo ""
     echo "构建的镜像:"
-    docker images | grep -E "code-server-custom|embedded-dev-env" || true
+    docker images | grep -E "code-server-custom" || true
     exit 0
 else
     echo -e "${RED}有 $FAILED 个测试失败${NC}"

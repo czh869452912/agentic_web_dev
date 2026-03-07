@@ -340,15 +340,13 @@ pull_images() {
     # 从 docker-compose.yml 和 Dockerfile 读取实际引用的镜像版本
     local compose_file="$DOCKER_DIR/docker-compose.yml"
     local cs_dockerfile="$DOCKER_DIR/Dockerfile.code-server"
-    local em_dockerfile="$DOCKER_DIR/Dockerfile.embedded"
 
-    local nginx_img fb_img cs_img em_img
+    local nginx_img fb_img cs_img
     nginx_img=$(grep -E 'image:\s*nginx' "$compose_file" | awk '{print $2}' | head -1)
     fb_img=$(grep -E 'image:\s*filebrowser' "$compose_file" | awk '{print $2}' | head -1)
     cs_img=$(grep -E '^FROM' "$cs_dockerfile" | head -1 | awk '{print $2}')
-    em_img=$(grep -E '^FROM' "$em_dockerfile" | head -1 | awk '{print $2}')
 
-    for img in "$nginx_img" "$fb_img" "$cs_img" "$em_img"; do
+    for img in "$nginx_img" "$fb_img" "$cs_img"; do
         [ -n "$img" ] && docker pull "$img"
     done
 
@@ -359,19 +357,13 @@ build_images() {
     echo -e "${YELLOW}构建自定义镜像...${NC}"
 
     # code-server context 必须是上级目录（包含 configs/）
-    echo -e "${BLUE}[1/2] 构建 Code Server + Claude Code（一体镜像）...${NC}"
+    echo -e "${BLUE}构建 Code Server + Claude Code + 嵌入式工具链（一体镜像）...${NC}"
     docker build \
         -f "$DOCKER_DIR/Dockerfile.code-server" \
         -t code-server-custom:latest \
         "$PROJECT_ROOT"
 
-    echo -e "${BLUE}[2/2] 构建嵌入式开发环境（完整工具链）...${NC}"
-    docker build \
-        -f "$DOCKER_DIR/Dockerfile.embedded" \
-        -t embedded-dev-env:latest \
-        "$PROJECT_ROOT"
-
-    echo -e "${GREEN}✓ 所有镜像构建完成${NC}"
+    echo -e "${GREEN}✓ 镜像构建完成${NC}"
 }
 
 save_images() {
@@ -385,7 +377,6 @@ save_images() {
         "codercom/code-server:latest"
         "filebrowser/filebrowser:latest"
         "code-server-custom:latest"
-        "embedded-dev-env:latest"
     )
     
     for img in "${images[@]}"; do
@@ -481,7 +472,7 @@ enter_shell() {
     local service="$1"
     if [ -z "$service" ]; then
         echo -e "${RED}错误: 请指定服务名${NC}"
-        echo "可用服务: code-server, embedded-dev, filebrowser"
+        echo "可用服务: code-server, filebrowser"
         exit 1
     fi
     
