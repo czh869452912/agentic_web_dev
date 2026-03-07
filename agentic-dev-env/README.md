@@ -1,458 +1,401 @@
-# Agentic 云开发环境 v2.0
+# Agentic 云开发环境
 
 内网私有化部署的 AI 驱动嵌入式开发平台。
-**版本特性**: 接入内网 OpenAI 兼容 API + 完整软件工程工具链
 
 ---
 
-## 🎯 核心特性
+## 核心特性
 
 | 特性 | 说明 |
 |------|------|
-| **单端口入口** | 所有服务通过 8443 端口访问 |
-| **内网 API 接入** | 支持 OpenAI 兼容格式的内网大模型 API |
-| **完整工具链** | 静态检查、代码覆盖率、文档生成、测试框架 |
-| **预装 VS Code 插件** | C/C++、嵌入式、Git、代码质量等 15+ 插件 |
-| **Web IDE** | 完整的 VS Code 功能 |
-| **完全离线** | 支持无互联网环境部署 |
+| **单端口入口** | 所有服务通过 8443 端口（HTTPS）访问 |
+| **Claude Code 内置** | Claude Code CLI 与 VS Code 在同一容器，终端直接使用 |
+| **嵌入式工具链** | ARM GCC 13.2、clang-tidy、cppcheck、OpenOCD 等内置于 IDE 容器 |
+| **完整扩展** | Cortex-Debug、CMake、GitLens、Cline 等 13+ 插件预装 |
+| **Web IDE** | 完整的 VS Code 功能（code-server） |
+| **离线友好** | 支持预下载镜像 + VSIX 离线部署 |
 
 ---
 
-## 📁 项目结构
+## 架构
 
 ```
-agentic-dev-env/
-├── README.md
-├── QUICKSTART.md
-├── CONFIGURATION.md
-├── MANIFEST.md
+浏览器
+  │
+  └─ HTTPS:8443
+       │
+    Nginx 网关（单一入口）
+       │
+       ├── /          →  code-server（VS Code Web）
+       │                   ├── Claude Code CLI（claude 命令）
+       │                   ├── ARM GCC 13.2 bare-metal 工具链
+       │                   ├── clang / clang-format / clang-tidy
+       │                   ├── cppcheck / valgrind / lcov / gcovr
+       │                   ├── gdb-multiarch / openocd
+       │                   └── 13+ VS Code 扩展
+       │
+       ├── /files/    →  filebrowser（Web 文件管理）
+       │
+       └── /health    →  健康检查端点
+```
+
+`embedded-dev` 容器提供完整重型工具链（QEMU、Unity Test、Rust 嵌入式、probe-rs 等），与 code-server 共享 `/workspace` 卷，可通过 `docker exec embedded-dev <cmd>` 访问。
+
+---
+
+## 项目结构
+
+```
+agentic_web_dev/
+├── .gitattributes                  # 强制 .sh 文件使用 LF 行尾
 ├── docker/
 │   ├── docker-compose.yml
-│   ├── Dockerfile.code-server      # VS Code + Claude Code 扩展
-│   ├── Dockerfile.claude
-│   ├── Dockerfile.embedded
+│   ├── Dockerfile.code-server      # VS Code + Claude Code + 嵌入式工具
+│   ├── Dockerfile.embedded         # 完整重型工具链（QEMU、Rust 等）
 │   └── .env.example
 ├── configs/
 │   ├── nginx.conf
 │   ├── filebrowser.json
-│   ├── settings.json
-│   ├── vsix/                       # Claude Code VSIX 离线包
-│   │   └── README.md
-│   └── ssl/
+│   ├── settings.json               # VS Code 默认设置
+│   ├── ssl/                        # SSL 证书（自动生成）
+│   └── vsix/                       # 离线 VSIX 安装包目录
+│       └── README.md
 ├── scripts/
-│   └── manage.sh
-└── workspace/
+│   ├── manage.sh                   # Linux/macOS 管理脚本
+│   ├── manage.ps1                  # Windows PowerShell 管理脚本
+│   └── code-server-entrypoint.sh  # code-server 容器启动脚本
+└── workspace/                      # 代码工作区（挂载卷）
 ```
 
 ---
 
-## 🚀 快速开始
+## 快速开始
 
-### 1. 初始化环境
+### Linux / macOS
 
 ```bash
-cd agentic-dev-env
+# 1. 初始化
 ./scripts/manage.sh init
-```
 
-### 2. 配置内网 LLM API
+# 2. 编辑 docker/.env 配置 API（见下方说明）
 
-```bash
-./scripts/manage.sh config
-```
-
-或直接编辑 `docker/.env`：
-
-```bash
-cp docker/.env.example docker/.env
-# 编辑 docker/.env
-```
-
-**关键配置项**:
-```bash
-# 内网 OpenAI 兼容 API 地址
-LLM_API_URL=http://10.0.0.100:8000/v1
-
-# API 密钥（如果需要）
-LLM_API_KEY=your-api-key
-
-# 模型名称
-LLM_MODEL=gpt-4
-```
-
-### 3. 测试 API 连接
-
-```bash
-./scripts/manage.sh test-api
-```
-
-### 4. 构建镜像
-
-```bash
-# 在线环境
+# 3. 构建镜像（需要网络）
 ./scripts/manage.sh pull
 ./scripts/manage.sh build
 
-# 离线环境
-./scripts/manage.sh load
-```
-
-### 5. 启动服务
-
-```bash
+# 4. 启动（自动生成 SSL 证书）
 ./scripts/manage.sh up
 ```
 
-### 6. 访问
+### Windows (PowerShell)
 
-- **VS Code**: https://localhost:8443/
-- **Claude Code**: https://localhost:8443/claude/
-- **文件管理**: https://localhost:8443/files/
+```powershell
+# 1. 初始化
+.\scripts\manage.ps1 init
+
+# 2. 编辑 docker\.env 配置 API
+
+# 3. 构建
+.\scripts\manage.ps1 pull
+.\scripts\manage.ps1 build
+
+# 4. 启动
+.\scripts\manage.ps1 up
+```
+
+### 访问
+
+| 服务 | 地址 |
+|------|------|
+| VS Code + Claude Code | https://localhost:8443/ |
+| 文件管理 | https://localhost:8443/files/ |
+
+默认密码：`docker/.env` 中的 `CODE_SERVER_PASSWORD`（默认 `changeme`）
 
 ---
 
-## 🛠️ 预装软件工程工具链
+## API 配置
 
-### 编译工具
-- **ARM GCC** 13.2 - ARM 裸机编译
-- **arm-linux-gnueabihf-gcc** - ARM Linux 编译
-- **aarch64-linux-gnu-gcc** - ARM64 编译
-- **Clang/LLVM** - 包含 clang-format, clang-tidy
-- **CMake** + **Ninja** - 现代构建系统
-- **Meson**, **SCons** - 替代构建工具
-- **Conan** - C/C++ 包管理器
-- **xmake** - 现代 C/C++ 构建工具
+Claude Code CLI 使用 **Anthropic API 协议**（非 OpenAI 兼容格式）。编辑 `docker/.env`：
 
-### 代码质量工具
-| 工具 | 用途 | 别名 |
-|------|------|------|
-| **clang-format** | 代码格式化 | `cf` |
-| **clang-tidy** | 静态分析 | `ct` |
-| **cppcheck** | C/C++ 静态检查 | `cppc` |
-| **valgrind** | 内存泄漏检测 | - |
-| **splint** | 安全代码检查 | - |
-
-### 代码覆盖率
-- **lcov** - GCC 覆盖率工具
-- **gcovr** - 覆盖率报告生成（别名 `cov`）
-
-### 测试框架
-- **Google Test** - C++ 单元测试
-- **CMocka** - C 单元测试
-- **Unity Test** - 嵌入式单元测试（预装在 /opt/test-frameworks）
-
-### 文档工具
-- **Doxygen** + **Graphviz** - 代码文档生成
-- **Sphinx** - Python 风格文档
-
-### 版本控制
-- **Git** + **Git LFS** + **tig** + **git-review**
-
-### 调试和模拟
-- **GDB Multiarch** - 多架构调试器
-- **OpenOCD** - JTAG/SWD 调试
-- **QEMU** - ARM/ARM64 模拟器
-- **probe-rs** / **cargo-embed** - Rust 嵌入式调试
-
-### Rust 工具链
-- **Rust** + **Cargo**
-- 目标平台: thumbv7m, thumbv7em, thumbv8m, aarch64-none
-
----
-
-## 🧩 预装 VS Code 插件
-
-### 🤖 AI 编程助手
-| 插件 | 功能 | 备注 |
-|------|------|------|
-| anthropic.claude-code | **Claude Code 官方扩展** | AI 编程助手，支持内联编辑、对话历史 |
-| saoudrizwan.claude-dev | Cline（备选） | 开源 Claude 替代品 |
-
-**Claude Code 扩展功能**:
-- 原生图形界面，集成在 VS Code 侧边栏
-- 文件编辑建议，内联 diff 显示
-- @-mentions 引用文件或代码行
-- 对话历史保存和多标签页
-- Quick Fix 集成（Ctrl+. 调用 Claude 修复）
-- 支持连接内网 OpenAI 兼容 API
-
-**注意**: 离线部署需要预下载 `.vsix` 文件，详见 `configs/vsix/README.md`
-
-### C/C++ 开发
-| 插件 | 功能 |
-|------|------|
-| ms-vscode.cpptools-extension-pack | C/C++ 完整支持 |
-| marus25.cortex-debug | ARM Cortex 调试 |
-| dan-c-underwood.arm | ARM 汇编支持 |
-| zixuanwang.linkerscript | 链接器脚本支持 |
-| ms-vscode.cmake-tools | CMake 集成 |
-| twxs.cmake | CMake 语法高亮 |
-
-### 代码质量
-| 插件 | 功能 |
-|------|------|
-| jbenden.c-cpp-flylint | 静态分析集成 |
-| xaver.clang-format | 代码格式化 |
-| notskm.clang-tidy | C++ 代码检查 |
-| cschlosser.doxdocgen | 文档生成 |
-
-### Git 和生产力
-| 插件 | 功能 |
-|------|------|
-| eamodio.gitlens | Git 增强 |
-| mhutchie.git-graph | Git 可视化 |
-| streetsidesoftware.code-spell-checker | 拼写检查 |
-| usernamehw.errorlens | 错误高亮 |
-| christian-kohler.path-intellisense | 路径补全 |
-
-### 主题
-- **Material Icon Theme** - 文件图标
-- **Material Theme** - 主题配色
-
----
-
-## 🔌 API 配置说明
-
-### OpenAI 兼容格式
-
-内网 API 需要支持以下端点：
-
-```
-GET  /v1/models          - 列出可用模型
-POST /v1/chat/completions - 聊天完成（流式/非流式）
-POST /v1/completions     - 文本完成
-```
-
-### 请求/响应格式
-
-**请求**:
-```json
-{
-  "model": "gpt-4",
-  "messages": [
-    {"role": "system", "content": "You are a helpful assistant."},
-    {"role": "user", "content": "Hello!"}
-  ],
-  "stream": false
-}
-```
-
-**响应**:
-```json
-{
-  "choices": [{
-    "message": {
-      "role": "assistant",
-      "content": "Hello! How can I help you?"
-    }
-  }]
-}
-```
-
-### Claude Code 配置
-
-Claude Code 会自动读取环境变量配置：
+### 方案 A：使用 Anthropic 官方 API
 
 ```bash
-# 查看当前配置
-claude config get
-
-# 临时切换模型
-claude --model gpt-4-turbo
-
-# 查看支持的命令
-claude --help
+ANTHROPIC_API_KEY=sk-ant-api03-...
+ANTHROPIC_BASE_URL=          # 留空，使用默认
 ```
+
+### 方案 B：使用内网 Anthropic 格式代理
+
+内网代理必须实现 Anthropic 消息协议（`POST /v1/messages`），而非 OpenAI 的 `/v1/chat/completions`。
+
+```bash
+ANTHROPIC_API_KEY=your-proxy-key
+ANTHROPIC_BASE_URL=http://10.0.0.100:8000
+```
+
+### 方案 C：不预配置（交互式登录）
+
+不填任何 API 配置，启动后在 VS Code 终端执行 `claude`，按提示完成认证。
 
 ---
 
-## 📖 使用示例
+## 使用 Claude Code
 
-### 嵌入式开发流程
-
-```bash
-# 进入开发容器
-docker-compose exec embedded-dev bash
-
-# 创建项目
-cd /workspace
-mkdir stm32-project && cd stm32-project
-
-# 初始化 CMake
-cmake -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE=arm-none-eabi.cmake
-
-# 格式化代码
-clang-format -i src/*.c
-
-# 静态检查
-clang-tidy src/main.c --
-cppcheck --enable=all --suppress=missingIncludeSystem src/
-
-# 编译
-ninja -C build
-
-# 代码覆盖率
-# 在测试后运行
-gcovr -r . --html --html-details -o coverage.html
-
-# 生成文档
-doxygen Doxyfile
-```
-
-### 使用 Claude Code
-
-在 VS Code 终端中：
+启动后在 VS Code 集成终端（Ctrl+` 打开）中：
 
 ```bash
 # 启动交互式会话
 claude
 
-# 让 Claude 审查代码
-claude review src/main.c
+# 让 Claude 审查/编辑文件
+claude src/main.c
 
-# 让 Claude 生成单元测试
-claude test src/calculator.c
+# 查看当前配置
+claude config get
 
-# 解释代码
-claude explain src/interrupt_handler.c
+# 切换模型
+claude config set model claude-sonnet-4-6
+```
+
+> Claude Code 通过终端 CLI 使用。`anthropic.claude-code` 官方 VS Code 扩展与当前 code-server 版本不兼容，已预装 Cline（`saoudrizwan.claude-dev`）作为可视化 AI 助手备选。
+
+---
+
+## 嵌入式开发工具速查
+
+以下工具在 code-server 容器的终端中直接可用：
+
+```bash
+# 编译（ARM bare-metal）
+arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb -o fw.elf main.c
+arm-gcc main.c    # 别名
+
+# 代码格式化
+clang-format -i src/*.c
+cf src/*.c         # 别名
+
+# 静态分析
+clang-tidy src/main.c --
+ct src/main.c --   # 别名
+cppcheck --enable=all src/
+cppc src/          # 别名
+
+# 内存分析（x86 测试程序）
+valgrind --leak-check=full ./test
+
+# 代码覆盖率
+gcovr -r . --html --html-details -o coverage.html
+cov                # 别名
+
+# 文档生成
+doxygen Doxyfile
+
+# 固件调试（通过 JTAG/SWD 连接）
+openocd -f interface/stlink.cfg -f target/stm32f4x.cfg
+
+# 查看 ELF 信息
+arm-none-eabi-size firmware.elf
+arm-none-eabi-objdump -d firmware.elf
+arm-size firmware.elf   # 别名
+```
+
+重型工具（QEMU、Unity Test、Rust 嵌入式）在 embedded-dev 容器：
+
+```bash
+docker exec -it embedded-dev bash
+qemu-system-arm -M stm32-p103 -kernel firmware.elf
 ```
 
 ---
 
-## 🔧 管理命令
+## 预装 VS Code 扩展
+
+### AI 编程助手
+| 扩展 | ID |
+|------|-----|
+| Cline | `saoudrizwan.claude-dev` |
+
+### 嵌入式 / C/C++ 开发
+| 扩展 | ID |
+|------|-----|
+| Cortex-Debug | `marus25.cortex-debug` |
+| ARM 汇编 | `dan-c-underwood.arm` |
+| 链接器脚本 | `zixuanwang.linkerscript` |
+| CMake Tools | `ms-vscode.cmake-tools` |
+| CMake 语法 | `twxs.cmake` |
+
+### 代码质量
+| 扩展 | ID |
+|------|-----|
+| C/C++ Flylint | `jbenden.c-cpp-flylint` |
+| clang-format | `xaver.clang-format` |
+| clang-tidy | `notskm.clang-tidy` |
+| Doxygen Generator | `cschlosser.doxdocgen` |
+
+### Git 和生产力
+| 扩展 | ID |
+|------|-----|
+| GitLens | `eamodio.gitlens` |
+| Git Graph | `mhutchie.git-graph` |
+| Error Lens | `usernamehw.errorlens` |
+| Path Intellisense | `christian-kohler.path-intellisense` |
+| Code Spell Checker | `streetsidesoftware.code-spell-checker` |
+| Material Icon Theme | `pkief.material-icon-theme` |
+
+> **说明**：`anthropic.claude-code` 与 code-server v4.21.0 不兼容未安装；`ms-vscode.cpptools-extension-pack` 在 code-server marketplace 中不可用。如需 C/C++ IntelliSense，请将对应 VSIX 放入 `configs/vsix/` 离线安装。
+
+---
+
+## 管理命令
+
+### Linux/macOS (`manage.sh`)
 
 ```bash
-# 基础管理
-./scripts/manage.sh init          # 初始化配置
-./scripts/manage.sh config        # 配置 API
-./scripts/manage.sh test-api      # 测试 API
-./scripts/manage.sh up            # 启动
-./scripts/manage.sh down          # 停止
-./scripts/manage.sh status        # 状态
-./scripts/manage.sh logs          # 日志
+./scripts/manage.sh init          # 初始化 .env
+./scripts/manage.sh ssl           # 生成 SSL 证书（up 时自动执行）
+./scripts/manage.sh pull          # 拉取基础镜像
+./scripts/manage.sh build         # 构建自定义镜像
+./scripts/manage.sh up            # 启动服务
+./scripts/manage.sh down          # 停止服务
+./scripts/manage.sh status        # 查看状态
+./scripts/manage.sh logs          # 查看所有日志
+./scripts/manage.sh logs code-server  # 查看指定服务日志
+./scripts/manage.sh shell code-server     # 进入 VS Code 容器
+./scripts/manage.sh shell embedded-dev    # 进入嵌入式工具链容器
+./scripts/manage.sh save          # 导出镜像（离线部署用）
+./scripts/manage.sh load          # 加载镜像
+```
 
-# 调试
-./scripts/manage.sh shell embedded-dev   # 进入开发环境
-./scripts/manage.sh shell code-server    # 进入 VS Code
+### Windows (`manage.ps1`)
 
-# 更新配置（不重启）
-./scripts/manage.sh update-config
+```powershell
+.\scripts\manage.ps1 <命令> [参数]
+# 命令与 manage.sh 相同
 ```
 
 ---
 
-## 📦 离线部署
+## 离线部署
 
-### 准备阶段（外网）
+### 准备（有网络环境）
 
 ```bash
-# 1. 准备环境
-./scripts/manage.sh init
-./scripts/manage.sh config
-
-# 2. 拉取和构建
 ./scripts/manage.sh pull
 ./scripts/manage.sh build
+./scripts/manage.sh save         # 导出到 images/
 
-# 3. 导出镜像
-./scripts/manage.sh save
+# 可选：预下载 VSIX 扩展放入 configs/vsix/
 
-# 4. 打包
-tar czvf agentic-dev-env-v2.tar.gz agentic-dev-env/ --exclude='workspace/*'
+tar czvf agentic-dev-env.tar.gz agentic_web_dev/ --exclude='workspace/*' --exclude='images/*.tar'
+# 单独打包镜像（较大）
+tar czvf images.tar.gz agentic_web_dev/images/
 ```
 
-### 部署阶段（内网）
+### 部署（内网）
 
 ```bash
-tar xzvf agentic-dev-env-v2.tar.gz
-cd agentic-dev-env
-
-# 编辑配置
+tar xzvf agentic-dev-env.tar.gz
+cd agentic_web_dev
 cp docker/.env.example docker/.env
-vim docker/.env  # 设置内网 API
+# 编辑 docker/.env 填入内网 API 配置
 
-# 加载镜像
 ./scripts/manage.sh load
-
-# 启动
 ./scripts/manage.sh up
 ```
 
 ---
 
-## 🔐 安全建议
+## 故障排除
 
-1. **修改默认密码**
-   ```bash
-   # 编辑 docker/.env
-   CODE_SERVER_PASSWORD=YourStrongPassword
-   ```
+### Claude Code 无法连接 API
 
-2. **限制访问 IP**
+```bash
+# 进入 code-server 容器检查
+docker exec -it code-server bash
+claude config get
+
+# 检查环境变量是否注入
+echo $ANTHROPIC_API_KEY
+echo $ANTHROPIC_BASE_URL
+```
+
+### VS Code 扩展不工作
+
+```bash
+# 查看 code-server 日志
+docker logs code-server
+
+# 手动安装扩展
+docker exec code-server code-server --install-extension <ext-id>
+```
+
+### ARM 工具链找不到
+
+```bash
+# 确认 PATH
+docker exec code-server bash -c "echo $PATH"
+docker exec code-server which arm-none-eabi-gcc
+```
+
+### WebSocket 错误 1006（工作台无法连接）
+
+nginx 必须使用 `$http_host`（含端口）转发 Host 头，否则 code-server CSRF 检查会拒绝 WebSocket 升级请求（返回 403）。当前配置已正确设置，若自定义 nginx 配置请确保：
+
+```nginx
+# code-server location 块中：
+proxy_set_header Host $http_host;  # 不能用 $host（会丢失端口）
+```
+
+### 构建时 apt-get 网络错误
+
+国内环境 `archive.ubuntu.com` 可能无法访问。Dockerfile 已切换至阿里云 HTTP 镜像，若仍失败可改为：
+
+```dockerfile
+RUN sed -i 's|http://mirrors.aliyun.com/ubuntu|http://mirrors.tuna.tsinghua.edu.cn/ubuntu|g' /etc/apt/sources.list
+```
+
+### 容器启动失败
+
+```bash
+# 检查 SSL 证书是否存在
+ls configs/ssl/
+# 如果不存在，重新生成
+./scripts/manage.sh ssl
+
+# 检查日志
+docker logs dev-gateway
+```
+
+---
+
+## 安全建议
+
+1. **修改默认密码**：编辑 `docker/.env` 中的 `CODE_SERVER_PASSWORD`
+2. **API Key 保护**：`.env` 文件已在 `.gitignore` 中，不要手动提交
+3. **IP 白名单**（可选）：在 `configs/nginx.conf` 的 server 块中添加
    ```nginx
-   # 在 configs/nginx.conf 中添加
    allow 10.0.0.0/8;
    deny all;
    ```
 
-3. **API Key 管理**
-   - 使用只读 API Key
-   - 定期轮换
-   - 避免提交到版本控制
-
 ---
 
-## ⚠️ 故障排除
+## 更新日志
 
-### API 连接失败
+### v3.1.0 (2026-03-06)
+- 修复 nginx WebSocket 代理（`$host` → `$http_host`），解决工作台无法连接（错误 1006）
+- 切换 apt 源至阿里云 HTTP 镜像，解决国内网络无法构建问题
+- 移除不可用包（`cloc`、`astyle` 等）及已被 `probe-rs-tools` 替代的 `cargo-embed`
+- 文档全面更新，与实际测试状态保持一致
 
-```bash
-# 测试连接
-./scripts/manage.sh test-api
-
-# 检查网络
-curl -v $LLM_API_URL/models
-
-# 检查容器网络
-docker exec claude-web curl $LLM_API_URL/models
-```
-
-### VS Code 插件不工作
-
-```bash
-# 查看日志
-docker logs code-server
-
-# 重新安装插件
-docker exec code-server code-server --install-extension <ext-id>
-```
-
-### 静态检查工具找不到
-
-```bash
-# 进入开发容器检查
-docker-compose exec embedded-dev which clang-tidy
-
-# 验证环境变量
-docker-compose exec embedded-dev echo $PATH
-```
-
----
-
-## 📝 更新日志
-
-### v2.0.0 (2026-03-05)
-- 支持内网 OpenAI 兼容 API
-- 完整软件工程工具链
-- 预装 15+ VS Code 插件
-- 新增配置管理脚本
+### v3.0.0 (2026-03-06)
+- Claude Code CLI 与 code-server 合并为单一容器，终端直接使用 `claude`
+- ARM GCC 13.2 / clang / cppcheck / openocd 内置于 IDE 容器
+- 移除独立 claude-web 服务（原为无功能静态页）
+- 新增 Windows PowerShell 管理脚本 `scripts/manage.ps1`
+- 修复 nginx 健康检查、build context、docker compose v1/v2 兼容性等问题
+- 新增 `.gitattributes` 防止 Windows CRLF 破坏 Linux 脚本
 
 ### v1.0.0 (2026-03-05)
 - 初始版本
-- 基础嵌入式开发环境
-
----
-
-## 📄 许可证
-
-MIT License - 仅供内部使用

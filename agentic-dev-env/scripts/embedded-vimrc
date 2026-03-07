@@ -1,0 +1,19 @@
+" 基础设置
+set number
+set tabstop=4
+set shiftwidth=4
+set expandtab
+set autoindent
+set smartindent
+set cindent
+syntax on
+set hlsearch
+set incsearch
+set background=dark
+set cursorline
+set colorcolumn=80,120
+set nowrap
+set encoding=utf-8
+
+" C/C++ 特定
+autocmd FileType c,cpp setlocal cindent cinoptions=g0
