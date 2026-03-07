@@ -8,9 +8,12 @@
 
 | 扩展 ID | 名称 | 说明 |
 |---------|------|------|
+| `anthropic.claude-code` | Claude Code | Anthropic 官方扩展；Open VSX 状态不稳定，建议通过 VSIX 安装 |
 | `saoudrizwan.claude-dev` | Cline | 支持 Claude API 的开源 AI 编程助手，提供侧边栏 UI |
+| `RooVeterinaryInc.roo-cline` | Roo Code | 多模式 AI 助手（Code / Architect / Ask 模式），Open VSX 可用 |
+| `TanishqKancharla.opencode-vscode` | opencode GUI | opencode CLI 的 VS Code 图形界面；**VSIX only**，不在 Open VSX |
 
-> **注意**：`anthropic.claude-code` 官方扩展与 code-server v4.21.0 不兼容，未安装。Claude Code 通过终端 `claude` 命令使用，功能完整。
+> **opencode CLI**：容器内已预装 `opencode` 命令（`npm install -g opencode-ai`）。GUI 扩展需将 VSIX 放入 `configs/vsix/` 后重新构建。
 
 ### 嵌入式 / C/C++ 开发
 
@@ -25,11 +28,20 @@
 
 > **说明**：`ms-vscode.cpptools-extension-pack` 和 `ms-vscode.cmake-tools` 是微软专有插件，不发布到 Open VSX Registry，code-server 无法从 marketplace 安装。C/C++ IntelliSense 由 `vscode-clangd` 提供（容器内已预装 clangd 二进制）。如需完整 cpptools，可将 VSIX 放入 `configs/vsix/` 目录后重新构建。
 
+### 测试与覆盖率
+
+| 扩展 ID | 名称 | 说明 |
+|---------|------|------|
+| `ryanluker.vscode-coverage-gutters` | Coverage Gutters | 内联显示 lcov/gcovr 覆盖率（行级高亮） |
+| `hbenl.vscode-test-explorer` | Test Explorer UI | 统一测试运行侧边栏 |
+
+> **C 测试工具**：容器内预装 `check`（libcheck）、`libcmocka-dev`、`libcunit1-dev`、`ceedling`（含 Unity/CMock）。
+
 ### 代码质量
 
 | 扩展 ID | 名称 |
 |---------|------|
-| `jbenden.c-cpp-flylint` | 集成 clang-tidy、cppcheck 等静态分析 |
+| `jbenden.c-cpp-flylint` | 集成 clang-tidy、cppcheck、splint 等静态分析 |
 | `xaver.clang-format` | clang-format 代码格式化 |
 | `notskm.clang-tidy` | clang-tidy 检查提示 |
 | `cschlosser.doxdocgen` | Doxygen 注释生成 |
@@ -41,6 +53,16 @@
 | `eamodio.gitlens` | Git 增强（行级 blame、历史等） |
 | `mhutchie.git-graph` | 可视化 Git 分支图 |
 
+### 图表与文档
+
+| 扩展 ID | 名称 | 说明 |
+|---------|------|------|
+| `jebbs.plantuml` | PlantUML | 渲染 PlantUML 图表（需容器内 `plantuml` + JRE，已预装） |
+| `bierner.markdown-mermaid` | Markdown Mermaid | Markdown 预览中渲染 Mermaid 图表 |
+| `yzhang.markdown-all-in-one` | Markdown All in One | TOC、快捷键、预览增强 |
+
+> **需求管理**：容器内预装 `doorstop` CLI（`pip3 install doorstop`），用于基于文本文件的需求追踪。`pandoc` 已预装，可将需求导出为 PDF/HTML/Word。
+
 ### 生产力
 
 | 扩展 ID | 名称 |
@@ -49,6 +71,7 @@
 | `christian-kohler.path-intellisense` | 文件路径自动补全 |
 | `streetsidesoftware.code-spell-checker` | 英文拼写检查 |
 | `pkief.material-icon-theme` | 文件图标主题 |
+| `Gruntfuggly.todo-tree` | TODO/FIXME 注释搜索与高亮 |
 
 ---
 

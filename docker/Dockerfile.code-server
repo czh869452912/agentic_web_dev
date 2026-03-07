@@ -22,6 +22,12 @@ RUN if [ -f /etc/apt/sources.list ] && grep -q "ubuntu" /etc/apt/sources.list 2>
     fi
 
 # ============================================================
+# apt 网络超时与重试配置（防止网络波动导致构建失败）
+# ============================================================
+RUN printf 'Acquire::http::Timeout "120";\nAcquire::https::Timeout "120";\nAcquire::Retries "5";\n' \
+    > /etc/apt/apt.conf.d/99network-resilience
+
+# ============================================================
 # 系统依赖 + 嵌入式开发基础工具
 # ============================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -59,6 +65,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     python3-venv \
     openocd \
+    check \
+    libcmocka-dev \
+    libcunit1-dev \
+    splint \
+    iwyu \
+    ruby \
+    ruby-dev \
+    pandoc \
+    plantuml \
+    default-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
@@ -69,7 +85,8 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     pyserial \
     pyelftools \
     meson \
-    autopep8
+    autopep8 \
+    doorstop
 
 # ============================================================
 # ARM bare-metal 工具链（arm-none-eabi）
@@ -94,6 +111,16 @@ RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - \
     && rm -rf /var/lib/apt/lists/*
 
 RUN npm install -g @anthropic-ai/claude-code
+
+# opencode AI 编码助手 CLI
+RUN npm install -g opencode-ai \
+    || echo "[WARN] opencode install failed, skipping"
+
+# ============================================================
+# Ceedling 嵌入式 C 测试框架（包含 Unity, CMock, CException）
+# ============================================================
+RUN gem install ceedling \
+    || echo "[WARN] ceedling install failed, skipping"
 
 # ============================================================
 # VS Code 插件（安装到 seed 目录，不被 volume 覆盖）
@@ -146,6 +173,38 @@ RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extens
 RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension saoudrizwan.claude-dev \
     || echo "[INFO] Cline not available, skipping"
 
+# Roo Code AI 助手
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension RooVeterinaryInc.roo-cline \
+    || echo "[WARN] Roo Code not available, skipping"
+
+# opencode GUI（非 Open VSX，可通过 VSIX 安装）
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension TanishqKancharla.opencode-vscode \
+    || echo "[INFO] opencode-vscode not on Open VSX, place VSIX in configs/vsix/"
+
+# 测试覆盖率
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension ryanluker.vscode-coverage-gutters \
+    || echo "[WARN] coverage-gutters not available, skipping"
+
+# 测试资源管理器
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension hbenl.vscode-test-explorer \
+    || echo "[WARN] test-explorer not available, skipping"
+
+# PlantUML 图表
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension jebbs.plantuml \
+    || echo "[WARN] plantuml not available, skipping"
+
+# Markdown Mermaid 图表
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension bierner.markdown-mermaid \
+    || echo "[WARN] markdown-mermaid not available, skipping"
+
+# Markdown All in One
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension yzhang.markdown-all-in-one \
+    || echo "[WARN] markdown-all-in-one not available, skipping"
+
+# TODO Tree 任务追踪
+RUN code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --install-extension Gruntfuggly.todo-tree \
+    || echo "[WARN] todo-tree not available, skipping"
+
 # ============================================================
 # 离线 VSIX 安装（将 .vsix 放在 configs/vsix/ 目录）
 # ============================================================
@@ -177,7 +236,12 @@ alias arm-size="arm-none-eabi-size"\n\
 alias cf="clang-format"\n\
 alias ct="clang-tidy"\n\
 alias cppc="cppcheck --enable=all --suppress=missingIncludeSystem"\n\
-alias cov="gcovr -r . --html --html-details -o coverage.html"\n' \
+alias cov="gcovr -r . --html --html-details -o coverage.html"\n\
+alias sp="splint -weak"\n\
+alias iwyu="include-what-you-use"\n\
+alias scan="scan-build --use-cc=gcc"\n\
+alias ds="doorstop"\n\
+alias ceed="ceedling"\n' \
     > /etc/profile.d/embedded-dev.sh \
     && cat /etc/profile.d/embedded-dev.sh >> /etc/bash.bashrc
 
