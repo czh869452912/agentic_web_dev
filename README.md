@@ -306,6 +306,122 @@ cp docker/.env.example docker/.env
 
 ---
 
+## 云端部署 SSL 配置
+
+将 code-server 部署在云端服务器（公网 IP 或内网固定 IP）时，本地浏览器通过 `https://<server-ip>:8443` 访问，需要额外处理 SSL 信任问题，否则 VS Code 插件（如 Cline）使用的 Service Worker 会因证书不可信而报错：
+
+> `SecurityError: Failed to register a ServiceWorker … An SSL certificate error occurred`
+
+---
+
+### 方案一：使用 Let's Encrypt（推荐，适合有域名的公网服务器）
+
+无需分发任何文件，浏览器原生信任。
+
+```bash
+# 1. 安装 certbot
+apt install certbot
+
+# 2. 申请证书（需 80/443 端口可访问或使用 DNS challenge）
+certbot certonly --standalone -d your.domain.com
+
+# 3. 将证书软链接或复制到项目 ssl 目录
+ln -sf /etc/letsencrypt/live/your.domain.com/fullchain.pem configs/ssl/server.crt
+ln -sf /etc/letsencrypt/live/your.domain.com/privkey.pem  configs/ssl/server.key
+
+# 4. 启动服务（跳过自动生成步骤）
+./scripts/manage.sh up
+```
+
+> Let's Encrypt 证书 90 天有效，用 `certbot renew` + cron 自动续期。
+
+---
+
+### 方案二：自签名证书 + 分发给客户端（适合内网/无域名环境）
+
+#### 步骤 1：在服务器上生成含服务器地址的证书
+
+```bash
+# 将服务器 IP 或内网域名写入 .env（可选，up 时自动带入）
+echo "SERVER_DOMAIN=192.168.1.100" >> docker/.env
+
+# 或直接传参生成
+./scripts/manage.sh ssl 192.168.1.100
+# 域名同理：
+./scripts/manage.sh ssl dev.company.com
+```
+
+生成的证书 SAN 中会同时包含 `localhost` 和指定的 IP/域名。
+
+#### 步骤 2：分发证书文件给每位客户端用户
+
+需要分发的**唯一文件**：
+
+```
+configs/ssl/server.crt
+```
+
+> **不要分发 `server.key`（私钥）**，客户端只需要公钥证书。
+
+#### 步骤 3：客户端导入受信任根证书
+
+**Windows（Chrome / Edge）**
+
+```powershell
+# 以管理员身份运行 PowerShell
+$cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("C:\path\to\server.crt")
+$store = New-Object System.Security.Cryptography.X509Certificates.X509Store("Root","LocalMachine")
+$store.Open("ReadWrite"); $store.Add($cert); $store.Close()
+```
+
+或图形界面：`Win+R` → `certmgr.msc` → "受信任的根证书颁发机构" → "证书" → 右键"导入"。
+
+**macOS（Safari / Chrome）**
+
+```bash
+sudo security add-trusted-cert -d -r trustRoot \
+    -k /Library/Keychains/System.keychain server.crt
+```
+
+**Linux（Chrome）**
+
+```bash
+# Debian/Ubuntu
+sudo cp server.crt /usr/local/share/ca-certificates/dev-server.crt
+sudo update-ca-certificates
+
+# Chrome 使用系统证书（需重启浏览器）
+```
+
+**Linux（Firefox）**
+
+Firefox 使用独立证书库，需手动导入：
+`设置` → `隐私与安全` → 拉到底部 `查看证书` → `证书颁发机构` → `导入`。
+
+---
+
+### 方案三：浏览器临时信任（最简单，有局限）
+
+首次访问时浏览器会显示"不安全"警告：
+1. 点击"高级" → "继续访问"
+2. **此方式对 Service Worker 无效**，Cline 等插件的 webview 仍会报 SSL 错误
+
+结论：若需要插件正常工作，必须使用方案一或方案二。
+
+---
+
+### 各方案对比
+
+| | 方案一（Let's Encrypt）| 方案二（自签名+分发）| 方案三（浏览器跳过）|
+|---|---|---|---|
+| 需要域名 | ✅ 是 | ❌ 否 | ❌ 否 |
+| 浏览器信任 | ✅ 自动 | ✅ 导入后 | ⚠️ 仅普通页面 |
+| Service Worker 可用 | ✅ | ✅ 导入后 | ❌ |
+| 客户端操作 | 无 | 导入一次证书 | 每次手动跳过 |
+| 适用场景 | 公网服务器 | 内网/离线环境 | 临时测试 |
+
+---
+
 ## 故障排除
 
 ### Claude Code 无法连接 API
@@ -382,6 +498,14 @@ docker logs dev-gateway
 ---
 
 ## 更新日志
+
+### v3.2.0 (2026-03-07)
+- 修复 SSL 证书不含 SAN 导致 Service Worker 注册失败（Cline 插件 webview 不可用）
+- manage.ps1：重新生成证书后自动导入 Windows 受信任根存储
+- manage.sh：gen_ssl 支持可选参数 `<host>`，云端 IP/域名加入证书 SAN；up 时读取 `.env` 中 `SERVER_DOMAIN` 自动传参
+- manage.sh：修正旧变量名（LLM_API_URL → ANTHROPIC_*）、update-config 引用已删容器、start_services 错误 URL、save_images 包含已删镜像
+- manage.sh：pull_images 改为从 docker-compose.yml / Dockerfile 动态读取镜像版本，与 manage.ps1 保持一致
+- 新增"云端部署 SSL 配置"文档，含三种方案对比及各平台证书导入步骤
 
 ### v3.1.0 (2026-03-06)
 - 修复 nginx WebSocket 代理（`$host` → `$http_host`），解决工作台无法连接（错误 1006）

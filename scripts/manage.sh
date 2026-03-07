@@ -43,7 +43,7 @@ usage() {
     echo "  status            查看服务状态"
     echo "  logs              查看日志"
     echo "  shell <svc>      进入指定服务的 shell"
-    echo "  ssl               生成自签名 SSL 证书"
+    echo "  ssl [host]        生成自签名 SSL 证书（host 为云端 IP 或域名，可选）"
     echo "  clean             清理构建缓存"
     echo "  update-config     更新 API 配置（不重启服务）"
     echo ""
@@ -90,34 +90,21 @@ init_config() {
     fi
     
     cat > "$ENV_FILE" << EOF
-# ========================================
-# 基础服务配置
-# ========================================
+# ---- 服务访问 ----
 GATEWAY_PORT=8443
 CODE_SERVER_PASSWORD=changeme
 SUDO_PASSWORD=changeme
 
-# ========================================
-# 内网大模型 API 配置（必填）
-# ========================================
-# OpenAI 兼容的 API 端点，例如：
-# - http://10.0.0.100:8000/v1
-# - https://llm.company.com/api/v1
-LLM_API_URL=
+# ---- Claude Code API ----
+# 方案A: 官方 API  -> 填写 ANTHROPIC_API_KEY，留空 ANTHROPIC_BASE_URL
+# 方案B: 内网代理  -> 同时填写（代理须实现 Anthropic /v1/messages 协议）
+# 方案C: 不填，启动后在终端执行 claude 完成交互式登录
+ANTHROPIC_API_KEY=
+ANTHROPIC_BASE_URL=
 
-# API 密钥（如果需要）
-LLM_API_KEY=
-
-# 模型名称
-LLM_MODEL=gpt-4
-
-# 内网 API 服务器 IP（用于 hosts 解析）
-# LLM_HOST_IP=10.0.0.100
-
-# ========================================
-# Claude Code 配置
-# ========================================
-CLAUDE_CODE_MODEL=gpt-4
+# ---- 云端部署（可选）----
+# 若部署在云端，填写服务器公网 IP 或域名，gen_ssl 会将其加入证书 SAN
+# SERVER_DOMAIN=1.2.3.4
 EOF
     
     echo -e "${GREEN}✓ 配置文件已创建: $ENV_FILE${NC}"
@@ -263,35 +250,52 @@ test_api() {
 
 # 更新配置（不重启服务）
 update_config() {
-    echo -e "${YELLOW}更新 Claude Code 配置...${NC}"
-    
+    echo -e "${YELLOW}更新 Claude Code 环境变量...${NC}"
+
+    if [ ! -f "$ENV_FILE" ]; then
+        echo -e "${RED}错误: $ENV_FILE 不存在，请先运行 init${NC}"
+        exit 1
+    fi
+
     source "$ENV_FILE"
-    
-    # 更新 claude-web 容器配置
-    docker exec claude-web sh -c "
-        cat > /root/.claude/settings.json << CONFIG
-{
-  \"apiUrl\": \"$LLM_API_URL\",
-  \"apiKey\": \"$LLM_API_KEY\",
-  \"model\": \"$LLM_MODEL\",
-  \"maxTokens\": 4096,
-  \"temperature\": 0.7,
-  \"timeout\": 120
-}
-CONFIG
-    "
-    
-    echo -e "${GREEN}✓ 配置已更新（无需重启服务）${NC}"
+
+    # 将 ANTHROPIC_* 变量注入到运行中的 code-server 容器
+    docker exec code-server bash -c "
+        export ANTHROPIC_API_KEY='${ANTHROPIC_API_KEY:-}'
+        export ANTHROPIC_BASE_URL='${ANTHROPIC_BASE_URL:-}'
+        echo 'ANTHROPIC_API_KEY and ANTHROPIC_BASE_URL updated in current shell'
+    " && echo -e "${GREEN}✓ 配置已注入（重启容器后永久生效：./manage.sh down && ./manage.sh up）${NC}"
 }
 
 gen_ssl() {
-    echo -e "${YELLOW}[1/1] 生成自签名 SSL 证书（含 SAN，支持 localhost）...${NC}"
+    # 可选参数: 云端服务器的域名或 IP（会加入 SAN，支持远程浏览器信任）
+    local server_host="${1:-}"
+
+    echo -e "${YELLOW}[1/1] 生成自签名 SSL 证书（含 SAN）...${NC}"
 
     SSL_DIR="$CONFIGS_DIR/ssl"
     mkdir -p "$SSL_DIR"
 
-    # 写入含 SAN 的配置（浏览器 / Service Worker 需要 SAN，仅 CN 不够）
-    cat > "$SSL_DIR/openssl.cnf" <<'EOF'
+    # 构建 alt_names 段：始终包含 localhost；若指定了云端地址则追加
+    local alt_names
+    alt_names="DNS.1 = localhost
+DNS.2 = dev-server.local
+IP.1  = 127.0.0.1"
+
+    if [ -n "$server_host" ]; then
+        # 判断是 IP 还是域名
+        if [[ "$server_host" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            alt_names="${alt_names}
+IP.2  = ${server_host}"
+        else
+            alt_names="${alt_names}
+DNS.3 = ${server_host}"
+        fi
+        echo -e "${BLUE}  SAN 包含云端地址: $server_host${NC}"
+    fi
+
+    # 写入含 SAN 的 openssl 配置（浏览器 / Service Worker 需要 SAN，仅 CN 不够）
+    cat > "$SSL_DIR/openssl.cnf" <<EOF
 [req]
 default_bits       = 2048
 prompt             = no
@@ -304,7 +308,7 @@ C  = CN
 ST = Beijing
 L  = Beijing
 O  = DevOps
-CN = localhost
+CN = ${server_host:-localhost}
 
 [v3_req]
 subjectAltName      = @alt_names
@@ -313,9 +317,7 @@ extendedKeyUsage    = serverAuth
 basicConstraints    = CA:FALSE
 
 [alt_names]
-DNS.1 = localhost
-DNS.2 = dev-server.local
-IP.1  = 127.0.0.1
+${alt_names}
 EOF
 
     openssl req -x509 -newkey rsa:2048 -sha256 -days 825 -nodes \
@@ -326,18 +328,30 @@ EOF
 
     echo -e "${GREEN}✓ SSL 证书已生成: $SSL_DIR/${NC}"
     echo -e "${YELLOW}  提示: 首次访问时浏览器仍会提示不安全，点击「高级」->「继续访问」即可${NC}"
-    echo -e "${YELLOW}  或将 $SSL_DIR/server.crt 导入系统信任存储以彻底消除警告${NC}"
+    echo -e "${YELLOW}  或将 $SSL_DIR/server.crt 分发给客户端并导入系统信任存储${NC}"
+    if [ -n "$server_host" ]; then
+        echo -e "${YELLOW}  云端访问地址: https://${server_host}:${GATEWAY_PORT:-8443}/${NC}"
+    fi
 }
 
 pull_images() {
     echo -e "${YELLOW}拉取基础镜像...${NC}"
-    
-    docker pull nginx:alpine
-    docker pull codercom/code-server:4.21.0
-    docker pull filebrowser/filebrowser:v2.27.0
-    docker pull node:20-slim
-    docker pull ubuntu:22.04
-    
+
+    # 从 docker-compose.yml 和 Dockerfile 读取实际引用的镜像版本
+    local compose_file="$DOCKER_DIR/docker-compose.yml"
+    local cs_dockerfile="$DOCKER_DIR/Dockerfile.code-server"
+    local em_dockerfile="$DOCKER_DIR/Dockerfile.embedded"
+
+    local nginx_img fb_img cs_img em_img
+    nginx_img=$(grep -E 'image:\s*nginx' "$compose_file" | awk '{print $2}' | head -1)
+    fb_img=$(grep -E 'image:\s*filebrowser' "$compose_file" | awk '{print $2}' | head -1)
+    cs_img=$(grep -E '^FROM' "$cs_dockerfile" | head -1 | awk '{print $2}')
+    em_img=$(grep -E '^FROM' "$em_dockerfile" | head -1 | awk '{print $2}')
+
+    for img in "$nginx_img" "$fb_img" "$cs_img" "$em_img"; do
+        [ -n "$img" ] && docker pull "$img"
+    done
+
     echo -e "${GREEN}✓ 基础镜像拉取完成${NC}"
 }
 
@@ -368,12 +382,9 @@ save_images() {
     
     declare -a images=(
         "nginx:alpine"
-        "codercom/code-server:4.21.0"
-        "filebrowser/filebrowser:v2.27.0"
-        "node:20-slim"
-        "ubuntu:22.04"
+        "codercom/code-server:latest"
+        "filebrowser/filebrowser:latest"
         "code-server-custom:latest"
-        "claude-web:latest"
         "embedded-dev-env:latest"
     )
     
@@ -419,7 +430,8 @@ start_services() {
     # 自动生成 SSL 证书（如果不存在）
     if [ ! -f "$CONFIGS_DIR/ssl/server.crt" ]; then
         echo -e "${YELLOW}SSL 证书不存在，自动生成...${NC}"
-        gen_ssl
+        source .env
+        gen_ssl "${SERVER_DOMAIN:-}"
     fi
 
     # 检查 API 配置
@@ -432,14 +444,14 @@ start_services() {
     mkdir -p "$PROJECT_ROOT/logs/nginx"
 
     $DOCKER_COMPOSE up -d
-    
+
     echo ""
     echo -e "${GREEN}✓ 服务已启动${NC}"
     echo ""
     echo -e "访问地址:"
-    echo -e "  ${BLUE}https://localhost:${GATEWAY_PORT:-8443}/${NC}          - VS Code"
-    echo -e "  ${BLUE}https://localhost:${GATEWAY_PORT:-8443}/claude/${NC}   - Claude Code"
-    echo -e "  ${BLUE}https://localhost:${GATEWAY_PORT:-8443}/files/${NC}   - 文件管理"
+    local host="${SERVER_DOMAIN:-localhost}"
+    echo -e "  ${BLUE}https://${host}:${GATEWAY_PORT:-8443}/${NC}        - VS Code + Claude Code"
+    echo -e "  ${BLUE}https://${host}:${GATEWAY_PORT:-8443}/files/${NC}  - 文件管理"
     echo ""
     echo -e "默认密码: ${CODE_SERVER_PASSWORD:-changeme}"
 }
@@ -469,7 +481,7 @@ enter_shell() {
     local service="$1"
     if [ -z "$service" ]; then
         echo -e "${RED}错误: 请指定服务名${NC}"
-        echo "可用服务: code-server, claude-web, embedded-dev"
+        echo "可用服务: code-server, embedded-dev, filebrowser"
         exit 1
     fi
     
@@ -528,7 +540,8 @@ main() {
             enter_shell "$2"
             ;;
         ssl)
-            gen_ssl
+            # 可选：./manage.sh ssl <domain-or-ip>  为云端部署生成含远程地址的证书
+            gen_ssl "${2:-}"
             ;;
         clean)
             clean
