@@ -62,3 +62,4 @@ general_settings:
   # Claude Code:   ANTHROPIC_API_KEY=<该值>
   # Cline/Roo:     OpenAI API Key=<该值>
   master_key: "${LITELLM_MASTER_KEY}"
+  disable_spend_logs: true   # 不需要数据库，key 验证走内存模式
