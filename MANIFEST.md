@@ -9,6 +9,7 @@
 | `configs/nginx.conf` | 反向代理配置 | 可选 |
 | `configs/settings.json` | VS Code 默认设置 | 可选 |
 | `configs/filebrowser.json` | 文件浏览器配置 | 一般不改 |
+| `configs/litellm_config.yaml.example` | LiteLLM 配置模板（复制为 `.yaml` 后编辑） | LiteLLM 启用时必须 |
 | `configs/ssl/` | SSL 证书目录（`up` 时自动生成） | 自动 |
 | `configs/vsix/` | 离线 VSIX 扩展安装包目录 | 离线部署时放入 |
 | `configs/vsix/README.md` | VSIX 离线安装指南 | 参考 |
@@ -18,7 +19,7 @@
 | 文件 | 用途 | 实测大小 |
 |------|------|----------|
 | `docker/Dockerfile.code-server` | VS Code + Claude Code CLI + 完整嵌入式工具链 + 13+ 扩展 | ~5GB |
-| `docker/docker-compose.yml` | 服务编排（3 个服务：gateway、code-server、filebrowser） | - |
+| `docker/docker-compose.yml` | 服务编排（3 个核心服务 + 可选 llm-gateway，profile: llm） | - |
 
 ## 脚本
 
@@ -71,9 +72,10 @@
 
 ## 离线部署检查清单
 
-- [ ] 外网：`build` + `save` 导出镜像
+- [ ] 外网：`build` + `save` 导出镜像（`--llm` 可选导出 LiteLLM 镜像）
 - [ ] 外网（可选）：下载 VSIX 扩展放入 `configs/vsix/`
 - [ ] 打包传输到内网
 - [ ] 内网：编辑 `docker/.env` 配置内网代理
-- [ ] 内网：`load` 加载镜像
-- [ ] 内网：`up` 启动服务
+- [ ] 内网：`load` 加载镜像（无需 docker compose）
+- [ ] 内网：`up` 启动服务（无 docker compose 时加 `--docker-only`）
+- [ ] 内网（可选）：配置 LiteLLM → `cp configs/litellm_config.yaml.example configs/litellm_config.yaml` → `up --llm`

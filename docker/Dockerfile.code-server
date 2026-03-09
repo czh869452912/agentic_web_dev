@@ -51,6 +51,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     clang-format \
     clang-tidy \
     clang-tools \
+    clangd \
     llvm \
     cppcheck \
     valgrind \

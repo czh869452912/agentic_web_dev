@@ -67,7 +67,31 @@ ANTHROPIC_BASE_URL=http://10.0.0.100:8000
 - [LiteLLM Proxy](https://docs.litellm.ai/docs/proxy/quick_start)（支持将 Anthropic 格式转发到任意模型）
 - [one-api](https://github.com/songquanpeng/one-api)
 
-### 方案 C：不预配置（交互式登录）
+### 方案 C：LiteLLM 统一网关（内网 OpenAI 兼容 API）
+
+内网只有 OpenAI 兼容 API 时，通过内置 LiteLLM 进行协议转换。同时暴露 Anthropic 格式供 Claude Code 使用，OpenAI 格式供 Cline / Roo Code 使用，统一 API key 无需单独登录。
+
+```bash
+# 1. 创建 LiteLLM 配置
+cp configs/litellm_config.yaml.example configs/litellm_config.yaml
+# 编辑：替换 YOUR_INTERNAL_MODEL、INTERNAL_API_BASE、INTERNAL_API_KEY
+
+# 2. docker/.env
+ANTHROPIC_BASE_URL=http://llm-gateway:4000   # code-server 容器内直连（推荐）
+ANTHROPIC_API_KEY=sk-devenv                  # 与 LITELLM_MASTER_KEY 相同
+LITELLM_MASTER_KEY=sk-devenv
+INTERNAL_API_BASE=http://10.0.0.100:8000
+INTERNAL_API_KEY=your-internal-key
+
+# 3. 启动
+./scripts/manage.sh up --llm
+```
+
+Cline / Roo Code 插件配置（使用 nginx 代理外部访问）：
+- Base URL：`https://<host>:8443/llm/v1`
+- API Key：`sk-devenv`
+
+### 方案 D：不预配置（交互式登录）
 
 不填任何 API 配置，启动服务后在 VS Code 终端执行：
 

@@ -1,0 +1,64 @@
+# ============================================================
+# LiteLLM 统一 LLM 网关配置模板
+#
+# 用法:
+#   cp configs/litellm_config.yaml.example configs/litellm_config.yaml
+#   编辑 configs/litellm_config.yaml，填写内网 API 信息
+#
+# 作用:
+#   将内网 OpenAI 兼容 API 同时暴露为：
+#     - Anthropic 格式（/v1/messages）       供 Claude Code CLI 使用
+#     - OpenAI 格式（/v1/chat/completions）  供 Cline / Roo Code 等使用
+#   统一 API key，各工具无需单独登录
+# ============================================================
+
+model_list:
+  # ----------------------------------------------------------
+  # Claude Code 请求的 Anthropic 模型名（按需增减）
+  # model_name: 工具看到的名称（不用改）
+  # model:      openai/<内网实际模型标识>（需要修改）
+  # api_base:   内网 OpenAI 兼容 API 地址（需要修改）
+  # ----------------------------------------------------------
+  - model_name: claude-opus-4-5
+    litellm_params:
+      model: openai/YOUR_INTERNAL_MODEL    # 替换为内网实际模型标识，如 deepseek-v3
+      api_base: "${INTERNAL_API_BASE}"     # 如 http://10.0.0.100:8000/v1
+      api_key: "${INTERNAL_API_KEY}"
+
+  - model_name: claude-sonnet-4-5
+    litellm_params:
+      model: openai/YOUR_INTERNAL_MODEL
+      api_base: "${INTERNAL_API_BASE}"
+      api_key: "${INTERNAL_API_KEY}"
+
+  - model_name: claude-haiku-4-5
+    litellm_params:
+      model: openai/YOUR_INTERNAL_MODEL
+      api_base: "${INTERNAL_API_BASE}"
+      api_key: "${INTERNAL_API_KEY}"
+
+  # ----------------------------------------------------------
+  # 为兼容 Cline / Roo Code 的 OpenAI 模型名（按需增减）
+  # ----------------------------------------------------------
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/YOUR_INTERNAL_MODEL
+      api_base: "${INTERNAL_API_BASE}"
+      api_key: "${INTERNAL_API_KEY}"
+
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/YOUR_INTERNAL_MODEL
+      api_base: "${INTERNAL_API_BASE}"
+      api_key: "${INTERNAL_API_KEY}"
+
+litellm_settings:
+  drop_params: true       # 忽略 LiteLLM 不支持的参数，兼容各插件差异
+  request_timeout: 600    # 长上下文请求超时（秒）
+  num_retries: 2
+
+general_settings:
+  # 统一 API key：在 docker/.env 的 LITELLM_MASTER_KEY 中设置
+  # Claude Code:   ANTHROPIC_API_KEY=<该值>
+  # Cline/Roo:     OpenAI API Key=<该值>
+  master_key: "${LITELLM_MASTER_KEY}"

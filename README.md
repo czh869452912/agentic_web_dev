@@ -29,7 +29,7 @@
        ├── /          →  code-server（VS Code Web）
        │                   ├── Claude Code CLI（claude 命令）
        │                   ├── ARM GCC 13.2 bare-metal 工具链
-       │                   ├── clang / clang-format / clang-tidy
+       │                   ├── clang / clang-format / clang-tidy / clangd
        │                   ├── cppcheck / valgrind / lcov / gcovr
        │                   ├── gdb-multiarch / openocd / stlink-tools
        │                   ├── QEMU (qemu-arm-static / qemu-system-arm)
@@ -39,6 +39,10 @@
        │                   └── 13+ VS Code 扩展
        │
        ├── /files/    →  filebrowser（Web 文件管理）
+       │
+       ├── /llm/      →  LiteLLM 统一 LLM 网关（可选，--llm 启用）
+       │                   ├── Anthropic 格式（/v1/messages）
+       │                   └── OpenAI 格式（/v1/chat/completions）
        │
        └── /health    →  健康检查端点
 ```
@@ -57,9 +61,10 @@ agentic_web_dev/
 ├── configs/
 │   ├── nginx.conf
 │   ├── filebrowser.json
-│   ├── settings.json               # VS Code 默认设置
-│   ├── ssl/                        # SSL 证书（自动生成）
-│   └── vsix/                       # 离线 VSIX 安装包目录
+│   ├── settings.json                    # VS Code 默认设置
+│   ├── litellm_config.yaml.example      # LiteLLM 配置模板
+│   ├── ssl/                             # SSL 证书（自动生成）
+│   └── vsix/                            # 离线 VSIX 安装包目录
 │       └── README.md
 ├── scripts/
 │   ├── manage.sh                   # Linux/macOS 管理脚本
@@ -111,6 +116,7 @@ agentic_web_dev/
 |------|------|
 | VS Code + Claude Code | https://localhost:8443/ |
 | 文件管理 | https://localhost:8443/files/ |
+| LiteLLM 网关（--llm 启用时） | https://localhost:8443/llm/ |
 
 默认密码：`docker/.env` 中的 `CODE_SERVER_PASSWORD`（默认 `changeme`）
 
@@ -136,7 +142,29 @@ ANTHROPIC_API_KEY=your-proxy-key
 ANTHROPIC_BASE_URL=http://10.0.0.100:8000
 ```
 
-### 方案 C：不预配置（交互式登录）
+### 方案 C：LiteLLM 统一网关（内网 OpenAI 兼容 API）
+
+内网只有 OpenAI 兼容 API？使用内置 LiteLLM 服务同时暴露 Anthropic 和 OpenAI 两种格式，Claude Code、Cline、Roo Code 均可通过统一 key 访问，无需单独登录。
+
+```bash
+# 1. 创建 LiteLLM 配置
+cp configs/litellm_config.yaml.example configs/litellm_config.yaml
+# 编辑填写内网 API 地址和模型名
+
+# 2. 配置 .env
+ANTHROPIC_BASE_URL=http://llm-gateway:4000   # 容器内直连
+ANTHROPIC_API_KEY=sk-devenv                  # 与 LITELLM_MASTER_KEY 相同
+LITELLM_MASTER_KEY=sk-devenv
+INTERNAL_API_BASE=http://10.0.0.100:8000
+INTERNAL_API_KEY=your-internal-key
+
+# 3. 启动时加 --llm 标志
+./scripts/manage.sh up --llm
+```
+
+访问 `https://localhost:8443/llm/` 可通过 nginx 代理使用 LiteLLM（OpenAI/Anthropic 双格式）。
+
+### 方案 D：不预配置（交互式登录）
 
 不填任何 API 配置，启动后在 VS Code 终端执行 `claude`，按提示完成认证。
 
@@ -258,7 +286,7 @@ conan install .          # Conan 包管理
 | Code Spell Checker | `streetsidesoftware.code-spell-checker` |
 | Material Icon Theme | `pkief.material-icon-theme` |
 
-> **说明**：`anthropic.claude-code` 与 code-server v4.21.0 不兼容未安装；`ms-vscode.cpptools-extension-pack` 在 code-server marketplace 中不可用。如需 C/C++ IntelliSense，请将对应 VSIX 放入 `configs/vsix/` 离线安装。
+> **说明**：`anthropic.claude-code` 与 code-server v4.21.0 不兼容未安装；`ms-vscode.cpptools-extension-pack` 在 code-server marketplace 中不可用。C/C++ IntelliSense 由 `llvm-vs-code-extensions.vscode-clangd` + 镜像内置 `clangd` 二进制提供，开箱即用。
 
 ---
 
@@ -272,13 +300,15 @@ conan install .          # Conan 包管理
 ./scripts/manage.sh pull          # 拉取基础镜像
 ./scripts/manage.sh build         # 构建自定义镜像
 ./scripts/manage.sh up            # 启动服务
+./scripts/manage.sh up --llm      # 启动服务（含 LiteLLM 网关）
+./scripts/manage.sh up --docker-only  # 在无 docker compose 环境启动
 ./scripts/manage.sh down          # 停止服务
 ./scripts/manage.sh status        # 查看状态
 ./scripts/manage.sh logs          # 查看所有日志
 ./scripts/manage.sh logs code-server  # 查看指定服务日志
-./scripts/manage.sh shell code-server     # 进入 VS Code 容器
+./scripts/manage.sh shell code-server # 进入 VS Code 容器
 ./scripts/manage.sh save          # 导出镜像（离线部署用）
-./scripts/manage.sh load          # 加载镜像
+./scripts/manage.sh load          # 加载镜像（无需 docker compose）
 ```
 
 ### Windows (`manage.ps1`)
@@ -316,6 +346,9 @@ cp docker/.env.example docker/.env
 
 ./scripts/manage.sh load
 ./scripts/manage.sh up
+
+# 若内网只有 docker（无 docker compose），使用 --docker-only 标志
+./scripts/manage.sh up --docker-only
 ```
 
 ---
@@ -512,6 +545,16 @@ docker logs dev-gateway
 ---
 
 ## 更新日志
+
+### v4.1.0 (2026-03-09)
+- 修复：Dockerfile 补充 `clangd` 包（`clang-tools` 不包含 language server 二进制），vscode-clangd 扩展现在开箱即用
+- 新增：manage.sh `--docker-only` 模式，`up`/`down`/`status`/`logs`/`shell` 均可在无 docker compose 环境下运行（`build` 本来就直接用 `docker build`，不受影响）
+- 新增：LiteLLM 统一 LLM 网关（可选服务，`--llm` 启用）
+  - 同时暴露 Anthropic（`/v1/messages`）和 OpenAI（`/v1/chat/completions`）格式
+  - 内网 OpenAI 兼容 API → 转换 → Claude Code / Cline / Roo Code
+  - 统一 API key，各工具无需单独登录配置
+  - nginx `/llm/` 路由使用懒解析，服务未启动时其他服务不受影响
+- 新增：`configs/litellm_config.yaml.example` 配置模板
 
 ### v4.0.0 (2026-03-07)
 - 将 embedded-dev 容器工具链全部迁移进 code-server，终端直接使用所有嵌入式工具

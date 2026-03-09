@@ -85,6 +85,36 @@ services:
           - files.local
     restart: unless-stopped
 
+  # ==========================================================
+  # 4. LiteLLM 统一 LLM 网关（可选，--profile llm 启用）
+  #    同时暴露 Anthropic /v1/messages 和 OpenAI /v1/chat/completions
+  #    Claude Code、Cline、Roo Code 均可通过统一 key 访问内网 LLM
+  # ==========================================================
+  llm-gateway:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: llm-gateway
+    hostname: llm-gateway
+    profiles:
+      - llm
+    command: --config /app/config.yaml --port 4000
+    environment:
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-devenv}
+      - INTERNAL_API_BASE=${INTERNAL_API_BASE:-}
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:-}
+    volumes:
+      - ../configs/litellm_config.yaml:/app/config.yaml:ro
+      - litellm-cache:/app/.cache
+    networks:
+      devnet:
+        aliases:
+          - llm.local
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 networks:
   devnet:
     driver: bridge
@@ -97,3 +127,4 @@ volumes:
   code-config:
   claude-config:
   filebrowser-db:
+  litellm-cache:

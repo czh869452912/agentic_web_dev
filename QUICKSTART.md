@@ -34,6 +34,7 @@
 |------|------|
 | VS Code Web | https://localhost:8443/ |
 | 文件管理 | https://localhost:8443/files/ |
+| LiteLLM 网关（--llm 启用时） | https://localhost:8443/llm/ |
 | 健康检查 | https://localhost:8443/health |
 
 > 使用自签名证书，浏览器会提示不安全，点击"高级 → 继续访问"即可。
@@ -43,14 +44,20 @@
 ## API 配置 (docker/.env)
 
 ```bash
-# Anthropic 官方 API
+# 方案 A：Anthropic 官方 API
 ANTHROPIC_API_KEY=sk-ant-api03-...
 
-# 内网代理（须实现 Anthropic /v1/messages 协议）
+# 方案 B：内网代理（须实现 Anthropic /v1/messages 协议）
 ANTHROPIC_API_KEY=your-key
 ANTHROPIC_BASE_URL=http://10.0.0.100:8000
 
-# 不填则启动后交互式登录（在 VS Code 终端运行 claude 命令）
+# 方案 C：LiteLLM 统一网关（内网 OpenAI 兼容 API）
+# cp configs/litellm_config.yaml.example configs/litellm_config.yaml  # 编辑后
+# ./scripts/manage.sh up --llm
+ANTHROPIC_BASE_URL=http://llm-gateway:4000
+ANTHROPIC_API_KEY=sk-devenv   # 与 LITELLM_MASTER_KEY 一致
+
+# 方案 D：不填则启动后交互式登录（在 VS Code 终端运行 claude 命令）
 ```
 
 ---

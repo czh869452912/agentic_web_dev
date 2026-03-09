@@ -92,3 +92,6 @@ temp/
 *.key
 *.crt
 *.csr
+
+# LiteLLM 运行时配置（包含内网地址，不入库；仅 .example 文件入库）
+configs/litellm_config.yaml
