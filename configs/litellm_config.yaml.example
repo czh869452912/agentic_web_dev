@@ -22,20 +22,20 @@ model_list:
   - model_name: claude-opus-4-5
     litellm_params:
       model: openai/YOUR_INTERNAL_MODEL    # 替换为内网实际模型标识，如 deepseek-v3
-      api_base: "${INTERNAL_API_BASE}"     # 如 http://10.0.0.100:8000/v1
-      api_key: "${INTERNAL_API_KEY}"
+      api_base: "os.environ/INTERNAL_API_BASE"   # 如 http://10.0.0.100:8000/v1
+      api_key: "os.environ/INTERNAL_API_KEY"
 
   - model_name: claude-sonnet-4-5
     litellm_params:
       model: openai/YOUR_INTERNAL_MODEL
-      api_base: "${INTERNAL_API_BASE}"
-      api_key: "${INTERNAL_API_KEY}"
+      api_base: "os.environ/INTERNAL_API_BASE"
+      api_key: "os.environ/INTERNAL_API_KEY"
 
   - model_name: claude-haiku-4-5
     litellm_params:
       model: openai/YOUR_INTERNAL_MODEL
-      api_base: "${INTERNAL_API_BASE}"
-      api_key: "${INTERNAL_API_KEY}"
+      api_base: "os.environ/INTERNAL_API_BASE"
+      api_key: "os.environ/INTERNAL_API_KEY"
 
   # ----------------------------------------------------------
   # 为兼容 Cline / Roo Code 的 OpenAI 模型名（按需增减）
@@ -43,14 +43,14 @@ model_list:
   - model_name: gpt-4o
     litellm_params:
       model: openai/YOUR_INTERNAL_MODEL
-      api_base: "${INTERNAL_API_BASE}"
-      api_key: "${INTERNAL_API_KEY}"
+      api_base: "os.environ/INTERNAL_API_BASE"
+      api_key: "os.environ/INTERNAL_API_KEY"
 
   - model_name: gpt-4o-mini
     litellm_params:
       model: openai/YOUR_INTERNAL_MODEL
-      api_base: "${INTERNAL_API_BASE}"
-      api_key: "${INTERNAL_API_KEY}"
+      api_base: "os.environ/INTERNAL_API_BASE"
+      api_key: "os.environ/INTERNAL_API_KEY"
 
 litellm_settings:
   drop_params: true       # 忽略 LiteLLM 不支持的参数，兼容各插件差异
@@ -58,8 +58,8 @@ litellm_settings:
   num_retries: 2
 
 general_settings:
-  # 统一 API key：在 docker/.env 的 LITELLM_MASTER_KEY 中设置
-  # Claude Code:   ANTHROPIC_API_KEY=<该值>
-  # Cline/Roo:     OpenAI API Key=<该值>
-  master_key: "${LITELLM_MASTER_KEY}"
+  # master_key 通过环境变量 LITELLM_MASTER_KEY 注入（Docker -e 传入）
+  # 不在 YAML 里写，避免 ${} 语法不被展开导致 key 不匹配触发 DB 查询
+  # Claude Code:  ANTHROPIC_API_KEY=<LITELLM_MASTER_KEY 的值>
+  # Cline/Roo:    OpenAI API Key=<LITELLM_MASTER_KEY 的值>
   disable_spend_logs: true   # 不需要数据库，key 验证走内存模式
