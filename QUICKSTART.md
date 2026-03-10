@@ -172,6 +172,12 @@ conan install .
 
 ## 常见问题
 
+**Q: 脚本报错 `bad interpreter` 或 `$'\r': command not found`**
+A: Windows 编辑器引入了 CRLF 行尾。在 Linux 上运行一键修复：
+```bash
+./scripts/fix-line-endings.sh
+```
+
 **Q: 浏览器显示"无法连接到服务器 (WebSocket 1006)"**
 A: nginx 需要使用 `$http_host`（含端口）转发 Host 头，否则 code-server CSRF 检查会拒绝 WebSocket 升级。当前配置已修复此问题，若重新部署请确保 `configs/nginx.conf` 中 code-server 代理块使用 `proxy_set_header Host $http_host;`。
 

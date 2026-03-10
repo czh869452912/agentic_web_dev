@@ -70,6 +70,7 @@ agentic_web_dev/
 │   ├── manage.sh                   # Linux/macOS 管理脚本
 │   ├── manage.ps1                  # Windows PowerShell 管理脚本
 │   ├── code-server-entrypoint.sh  # code-server 容器启动脚本
+│   ├── fix-line-endings.sh        # 清理 CRLF/BOM（跨平台编辑后运行）
 │   └── test-docker-build.sh       # 镜像构建测试脚本
 └── workspace/                      # 代码工作区（挂载卷）
 ```
@@ -532,6 +533,28 @@ docker logs dev-gateway
 
 ---
 
+## 跨平台编辑：行尾与编码修复
+
+项目在 Windows 和 Linux 之间来回编辑时，部分编辑器（如 VS Code on Windows、PowerShell）会写入 CRLF 行尾或 UTF-8 BOM，导致 Linux 上的 shell 脚本和配置文件损坏（常见表现：`bad interpreter`、`$'\r': command not found`）。
+
+项目已通过 `.gitattributes` 对 `.sh` 等文件强制 LF，但本地未提交的文件或手动编辑的配置仍可能被污染。
+
+### 一键修复（在 Linux 上运行）
+
+```bash
+./scripts/fix-line-endings.sh
+```
+
+**处理范围**：`.sh` `.yml` `.yaml` `.conf` `.json` `.env` 及 `scripts/` 下无扩展名文件
+**跳过**：`images/` 目录、`.tar` 文件等二进制内容
+**操作**：CRLF → LF、去除 UTF-8 BOM，就地修改原文件
+
+建议在以下时机运行：
+- 从 Windows 拉取代码后首次在 Linux 上启动
+- 手动编辑配置文件后遇到奇怪报错时
+
+---
+
 ## 安全建议
 
 1. **修改默认密码**：编辑 `docker/.env` 中的 `CODE_SERVER_PASSWORD`
@@ -545,6 +568,9 @@ docker logs dev-gateway
 ---
 
 ## 更新日志
+
+### v4.2.0 (2026-03-10)
+- 新增：`scripts/fix-line-endings.sh`，一键清理跨平台编辑引入的 CRLF 行尾和 UTF-8 BOM，防止配置文件在 Linux 上损坏
 
 ### v4.1.0 (2026-03-09)
 - 修复：Dockerfile 补充 `clangd` 包（`clang-tools` 不包含 language server 二进制），vscode-clangd 扩展现在开箱即用

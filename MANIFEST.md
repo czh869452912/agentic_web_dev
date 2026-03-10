@@ -29,6 +29,7 @@
 | `scripts/manage.ps1` | Windows PowerShell 环境管理脚本 |
 | `scripts/code-server-entrypoint.sh` | code-server 容器启动脚本（配置 Claude Code 后启动 code-server） |
 | `scripts/test-docker-build.sh` | 镜像构建验证测试脚本 |
+| `scripts/fix-line-endings.sh` | 清理 CRLF 行尾和 UTF-8 BOM（跨平台编辑后在 Linux 上运行） |
 
 ## 文档
 
