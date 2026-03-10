@@ -401,7 +401,7 @@ load_images() {
 ensure_network() {
     if ! docker network inspect devnet &>/dev/null; then
         echo -e "${BLUE}  创建网络 devnet ...${NC}"
-        docker network create --driver bridge --subnet 172.20.0.0/16 devnet
+        docker network create --driver bridge --subnet 172.28.0.0/24 devnet
     fi
 }
 
