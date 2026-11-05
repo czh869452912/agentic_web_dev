@@ -47,7 +47,6 @@ usage() {
     echo ""
     echo "命令:"
     echo "  init              初始化环境（创建 .env 文件）"
-    echo "  test-api          测试 API 连接"
     echo "  build             构建所有 Docker 镜像（需要 docker compose）"
     echo "  pull              拉取基础镜像"
     echo "  save              保存镜像到 images/ 目录"
@@ -59,7 +58,6 @@ usage() {
     echo "  shell <svc>      进入指定服务的 shell"
     echo "  ssl [host]        生成自签名 SSL 证书（host 为云端 IP 或域名，可选）"
     echo "  clean             清理构建缓存"
-    echo "  update-config     更新 API 配置（不重启服务）"
     echo ""
     echo "选项:"
     echo "  --llm             包含 LiteLLM 统一网关服务（需 configs/litellm_config.yaml）"
@@ -125,23 +123,12 @@ GATEWAY_PORT=8443
 CODE_SERVER_PASSWORD=changeme
 SUDO_PASSWORD=changeme
 
-# ---- Claude Code API ----
-# 方案A: 官方 API  -> 填写 ANTHROPIC_API_KEY，留空 ANTHROPIC_BASE_URL
-# 方案B: 内网直接代理（实现 Anthropic /v1/messages 协议）
-# 方案C: LiteLLM（见下方，内网 OpenAI 兼容 API 转 Anthropic 格式）
-# 方案D: 不填，启动后在终端执行 claude 完成交互式登录
-ANTHROPIC_API_KEY=
-ANTHROPIC_BASE_URL=
-
 # ---- LiteLLM 统一 LLM 网关（可选）----
 # 启用: ./manage.sh up --llm  或  docker compose --profile llm up -d
 # 前置: cp configs/litellm_config.yaml.example configs/litellm_config.yaml
 INTERNAL_API_BASE=http://10.0.0.1:8000
 INTERNAL_API_KEY=your-internal-api-key
 LITELLM_MASTER_KEY=sk-devenv
-# 启用 LiteLLM 后，将上方改为:
-# ANTHROPIC_BASE_URL=http://llm-gateway:4000
-# ANTHROPIC_API_KEY=sk-devenv
 
 # ---- 云端部署（可选）----
 # 若部署在云端，填写服务器公网 IP 或域名，gen_ssl 会将其加入证书 SAN
@@ -168,80 +155,6 @@ EOF
             echo -e "${YELLOW}请手动创建: cp configs/litellm_config.yaml.example configs/litellm_config.yaml${NC}"
         fi
     fi
-}
-
-# 测试 API 连接
-test_api() {
-    echo -e "${YELLOW}测试 API 连接...${NC}"
-
-    if [ ! -f "$ENV_FILE" ]; then
-        echo -e "${RED}错误: 配置文件不存在，请先运行 init${NC}"
-        exit 1
-    fi
-
-    source "$ENV_FILE"
-
-    if [ -z "$ANTHROPIC_API_KEY" ]; then
-        echo -e "${RED}错误: ANTHROPIC_API_KEY 未配置${NC}"
-        exit 1
-    fi
-
-    local base_url="${ANTHROPIC_BASE_URL:-https://api.anthropic.com}"
-    echo -e "${BLUE}API URL: $base_url${NC}"
-    echo ""
-
-    echo -e "${YELLOW}测试 /v1/messages 连通性...${NC}"
-    http_code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 \
-        -X POST "$base_url/v1/messages" \
-        -H "x-api-key: $ANTHROPIC_API_KEY" \
-        -H "anthropic-version: 2023-06-01" \
-        -H "content-type: application/json" \
-        -d '{"model":"claude-haiku-4-5-20251001","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}' \
-        2>/dev/null || echo "000")
-
-    if [ "$http_code" = "200" ]; then
-        echo -e "${GREEN}✓ API 连接并认证成功${NC}"
-    elif [ "$http_code" = "401" ]; then
-        echo -e "${RED}✗ API Key 无效（401）${NC}"
-    elif [ "$http_code" = "000" ]; then
-        echo -e "${RED}✗ 无法连接到 $base_url（网络不可达或超时）${NC}"
-    else
-        echo -e "${YELLOW}? API 返回状态码: $http_code${NC}"
-    fi
-
-    # 若配置了 LiteLLM，额外测试健康端点
-    if echo "$base_url" | grep -qE 'llm-gateway|/llm'; then
-        echo ""
-        echo -e "${YELLOW}检测到 LiteLLM 配置，测试健康端点...${NC}"
-        local llm_health_code
-        llm_health_code=$(curl -s -o /dev/null -w "%{http_code}" \
-            --connect-timeout 10 \
-            "http://llm-gateway:4000/health" 2>/dev/null || echo "000")
-        if [ "$llm_health_code" = "200" ]; then
-            echo -e "${GREEN}✓ LiteLLM 健康检查通过${NC}"
-        else
-            echo -e "${YELLOW}? LiteLLM 健康检查返回: $llm_health_code（服务未启动或不可达）${NC}"
-        fi
-    fi
-}
-
-# 更新配置（不重启服务）
-update_config() {
-    echo -e "${YELLOW}更新 Claude Code 环境变量...${NC}"
-
-    if [ ! -f "$ENV_FILE" ]; then
-        echo -e "${RED}错误: $ENV_FILE 不存在，请先运行 init${NC}"
-        exit 1
-    fi
-
-    source "$ENV_FILE"
-
-    # 将 ANTHROPIC_* 变量注入到运行中的 code-server 容器
-    docker exec code-server bash -c "
-        export ANTHROPIC_API_KEY='${ANTHROPIC_API_KEY:-}'
-        export ANTHROPIC_BASE_URL='${ANTHROPIC_BASE_URL:-}'
-        echo 'ANTHROPIC_API_KEY and ANTHROPIC_BASE_URL updated in current shell'
-    " && echo -e "${GREEN}✓ 配置已注入（重启容器后永久生效：./manage.sh down && ./manage.sh up）${NC}"
 }
 
 gen_ssl() {
@@ -337,7 +250,7 @@ build_images() {
     echo -e "${YELLOW}构建自定义镜像...${NC}"
 
     # build 使用 docker build 直接构建，不依赖 docker compose
-    echo -e "${BLUE}构建 Code Server + Claude Code + 嵌入式工具链（一体镜像）...${NC}"
+    echo -e "${BLUE}构建 Code Server + OpenCode / Kilo Code + 嵌入式工具链（一体镜像）...${NC}"
     docker build \
         -f "$DOCKER_DIR/Dockerfile.code-server" \
         -t code-server-custom:latest \
@@ -406,7 +319,7 @@ ensure_network() {
 }
 
 ensure_volumes() {
-    for vol in code-extensions code-config claude-config filebrowser-db; do
+    for vol in code-extensions code-config dsh-data filebrowser-db; do
         if ! docker volume inspect "$vol" &>/dev/null; then
             echo -e "${BLUE}  创建 volume: $vol${NC}"
             docker volume create "$vol"
@@ -436,12 +349,10 @@ start_services_docker() {
         --network-alias vscode.local \
         -e "PASSWORD=${CODE_SERVER_PASSWORD:-changeme}" \
         -e "SUDO_PASSWORD=${SUDO_PASSWORD:-changeme}" \
-        -e "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}" \
-        -e "ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}" \
         -v "$PROJECT_ROOT/workspace:/workspace" \
         -v "code-extensions:/home/coder/.local/share/code-server/extensions" \
         -v "code-config:/home/coder/.config/code-server" \
-        -v "claude-config:/home/coder/.claude" \
+        -v "dsh-data:/var/lib/dsh" \
         code-server-custom:latest
 
     # 2. filebrowser
@@ -577,12 +488,7 @@ start_services() {
         gen_ssl "${SERVER_DOMAIN:-}"
     fi
 
-    # 检查 API 配置
     source .env
-    if [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$ANTHROPIC_BASE_URL" ]; then
-        echo -e "${YELLOW}警告: ANTHROPIC_API_KEY 和 ANTHROPIC_BASE_URL 均未配置${NC}"
-        echo -e "${YELLOW}Claude Code 启动后需要手动运行 'claude' 完成登录${NC}"
-    fi
 
     mkdir -p "$PROJECT_ROOT/logs/nginx"
 
@@ -599,14 +505,12 @@ start_services() {
     echo ""
     echo -e "访问地址:"
     local host="${SERVER_DOMAIN:-localhost}"
-    echo -e "  ${BLUE}https://${host}:${GATEWAY_PORT:-8443}/${NC}        - VS Code + Claude Code"
+    echo -e "  ${BLUE}https://${host}:${GATEWAY_PORT:-8443}/${NC}        - VS Code + OpenCode / Kilo Code"
     echo -e "  ${BLUE}https://${host}:${GATEWAY_PORT:-8443}/files/${NC}  - 文件管理"
     if [ "${USE_LLM:-false}" = "true" ]; then
         echo -e "  ${BLUE}https://${host}:${GATEWAY_PORT:-8443}/llm/${NC}    - LiteLLM 网关"
         echo ""
-        echo -e "${YELLOW}Claude Code 配置（容器内）:${NC}"
-        echo -e "  ANTHROPIC_BASE_URL=http://llm-gateway:4000"
-        echo -e "  ANTHROPIC_API_KEY=${LITELLM_MASTER_KEY:-sk-devenv}"
+        echo "在 OpenCode / Kilo Code 中配置 OpenAI 兼容接口：http://llm-gateway:4000/v1"
     fi
     echo ""
     echo -e "默认密码: ${CODE_SERVER_PASSWORD:-changeme}"
@@ -678,12 +582,6 @@ main() {
     case "${1:-}" in
         init)
             init_config
-            ;;
-        test-api)
-            test_api
-            ;;
-        update-config)
-            update_config
             ;;
         build)
             build_images

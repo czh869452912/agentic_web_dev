@@ -2,15 +2,13 @@
 
 ## 预装扩展列表
 
-构建时通过 `code-server --install-extension` 自动安装以下扩展（均使用 `|| true` 保护，单个失败不中断构建）：
+构建时通过 `code-server --install-extension` 自动安装以下扩展（Kilo Code 必须安装成功；其他可选扩展安装失败会跳过）：
 
 ### AI 编程助手
 
 | 扩展 ID | 名称 | 说明 |
 |---------|------|------|
-| `anthropic.claude-code` | Claude Code | Anthropic 官方扩展；Open VSX 状态不稳定，建议通过 VSIX 安装 |
-| `saoudrizwan.claude-dev` | Cline | 支持 Claude API 的开源 AI 编程助手，提供侧边栏 UI |
-| `RooVeterinaryInc.roo-cline` | Roo Code | 多模式 AI 助手（Code / Architect / Ask 模式），Open VSX 可用 |
+| `kilocode.kilo-code` | Kilo Code | 核心 IDE 编程智能体，通过 Open VSX 安装 |
 | `TanishqKancharla.opencode-vscode` | opencode GUI | opencode CLI 的 VS Code 图形界面；**VSIX only**，不在 Open VSX |
 
 > **opencode CLI**：容器内已预装 `opencode` 命令（`npm install -g opencode-ai`）。GUI 扩展需将 VSIX 放入 `configs/vsix/` 后重新构建。
@@ -124,14 +122,11 @@ docker exec code-server code-server --install-extension /tmp/my-extension.vsix
 
 ## 扩展配置
 
-### Claude Code 扩展连接内网 API
+### Kilo Code 连接模型
 
-Claude Code VS Code 扩展遵循与 CLI 相同的配置，通过容器环境变量自动注入：
+在扩展的 Providers 页面配置提供商、Key 和模型。自建 Chat Completions 接口选择 OpenAI Compatible。启用 LiteLLM 后，容器内地址为 `http://llm-gateway:4000/v1`，Key 为 `.env` 的 `LITELLM_MASTER_KEY`。详见 [配置指南](CONFIGURATION.md)。
 
-- `ANTHROPIC_API_KEY` → API 密钥
-- `ANTHROPIC_BASE_URL` → API 基础地址（内网代理）
-
-在 VS Code 设置中也可手动配置（`settings.json`）。
+容器启动时通过扩展管理器卸载旧数据卷中的 Claude Code、Cline、Roo Code 扩展，同时保留用户配置和会话。
 
 ### Cortex-Debug 配置示例
 

@@ -69,10 +69,10 @@ test_build() {
 # 记录失败数
 FAILED=0
 
-# 1. 测试 code-server + Claude Code 镜像（build context 必须是项目根，包含 configs/）
+# 1. 测试 code-server + OpenCode / Kilo Code 镜像（build context 必须是项目根，包含 configs/）
 echo "------------------------------------------"
 if ! test_build \
-    "code-server + Claude Code" \
+    "code-server + OpenCode / Kilo Code" \
     "$DOCKER_DIR/Dockerfile.code-server" \
     "$PROJECT_ROOT" \
     "code-server-custom:latest"; then

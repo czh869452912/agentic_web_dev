@@ -122,7 +122,7 @@ function Ensure-Network {
 }
 
 function Ensure-Volumes {
-    @("code-extensions","code-config","claude-config","filebrowser-db") | ForEach-Object {
+    @("code-extensions","code-config","dsh-data","filebrowser-db") | ForEach-Object {
         $vol = $_
         $savedEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
         docker volume inspect $vol 2>&1 | Out-Null
@@ -153,8 +153,6 @@ function Invoke-UpDocker {
     $envVars      = Read-EnvFile
     $pw           = if ($envVars["CODE_SERVER_PASSWORD"]) { $envVars["CODE_SERVER_PASSWORD"] } else { "changeme" }
     $sudoPw       = if ($envVars["SUDO_PASSWORD"])        { $envVars["SUDO_PASSWORD"] }        else { "changeme" }
-    $apiKey       = if ($envVars["ANTHROPIC_API_KEY"])    { $envVars["ANTHROPIC_API_KEY"] }    else { "" }
-    $baseUrl      = if ($envVars["ANTHROPIC_BASE_URL"])   { $envVars["ANTHROPIC_BASE_URL"] }   else { "" }
     $gwPort       = if ($envVars["GATEWAY_PORT"])         { $envVars["GATEWAY_PORT"] }         else { "8443" }
     $litellmKey   = if ($envVars["LITELLM_MASTER_KEY"])   { $envVars["LITELLM_MASTER_KEY"] }   else { "sk-devenv" }
     $internalBase = if ($envVars["INTERNAL_API_BASE"])    { $envVars["INTERNAL_API_BASE"] }    else { "" }
@@ -168,11 +166,10 @@ function Invoke-UpDocker {
     Invoke-DockerRunContainer -Name "code-server" -RunArgs @(
         "--hostname","code-server","--network-alias","vscode.local",
         "-e","PASSWORD=$pw","-e","SUDO_PASSWORD=$sudoPw",
-        "-e","ANTHROPIC_API_KEY=$apiKey","-e","ANTHROPIC_BASE_URL=$baseUrl",
         "-v","${ProjectRoot}\workspace:/workspace",
         "-v","code-extensions:/home/coder/.local/share/code-server/extensions",
         "-v","code-config:/home/coder/.config/code-server",
-        "-v","claude-config:/home/coder/.claude",
+        "-v","dsh-data:/var/lib/dsh",
         "code-server-custom:latest"
     )
 
@@ -309,17 +306,7 @@ GATEWAY_PORT=8443
 CODE_SERVER_PASSWORD=changeme
 SUDO_PASSWORD=changeme
 
-# ---- Claude Code API ----
-# 方案A: 官方 API  -> 填写 ANTHROPIC_API_KEY，留空 ANTHROPIC_BASE_URL
-# 方案B: 内网代理  -> 同时填写（代理须实现 Anthropic /v1/messages 协议）
-# 方案C: LiteLLM 统一网关（内网 OpenAI 兼容 API）->见下方 LiteLLM 配置，启动时加 -Llm
-#   ANTHROPIC_API_KEY=sk-devenv         # 与 LITELLM_MASTER_KEY 保持一致
-#   ANTHROPIC_BASE_URL=http://llm-gateway:4000
-# 方案D: 不填，启动后在终端执行 claude 完成交互式登录
-ANTHROPIC_API_KEY=
-ANTHROPIC_BASE_URL=
-
-# ---- LiteLLM 统一 LLM 网关（可选，方案C）----
+# ---- LiteLLM 统一 LLM 网关（可选）----
 # 前置: Copy-Item configs\litellm_config.yaml.example configs\litellm_config.yaml
 # 启动: .\scripts\manage.ps1 up -Llm
 INTERNAL_API_BASE=http://10.0.0.1:8000
@@ -462,7 +449,7 @@ $altNames
 
 function Invoke-Build {
     Assert-Docker
-    Write-Info "构建 code-server + Claude Code + 嵌入式工具链（build context: 项目根目录）"
+    Write-Info "构建 code-server + OpenCode / Kilo Code + 嵌入式工具链（build context: 项目根目录）"
     docker build `
         -f "$DockerDir\Dockerfile.code-server" `
         -t "code-server-custom:latest" `
@@ -515,15 +502,12 @@ function Invoke-Up {
     $envVars = Read-EnvFile
     $gwPort  = if ($envVars["GATEWAY_PORT"]) { $envVars["GATEWAY_PORT"] } else { "8443" }
     Write-Host "  访问地址:" -ForegroundColor Cyan
-    Write-Host "    VSCode + Claude: https://localhost:$gwPort"    -ForegroundColor White
+    Write-Host "    VSCode + Kilo: https://localhost:$gwPort"    -ForegroundColor White
     Write-Host "    文件管理:        https://localhost:$gwPort/files/" -ForegroundColor White
     if ($script:UseLlm) {
         Write-Host "    LiteLLM 网关:    https://localhost:$gwPort/llm/" -ForegroundColor White
         Write-Host ""
-        $lkey = if ($envVars["LITELLM_MASTER_KEY"]) { $envVars["LITELLM_MASTER_KEY"] } else { "sk-devenv" }
-        Write-Host "  Claude Code 配置（容器内）:" -ForegroundColor Yellow
-        Write-Host "    ANTHROPIC_BASE_URL=http://llm-gateway:4000" -ForegroundColor White
-        Write-Host "    ANTHROPIC_API_KEY=$lkey" -ForegroundColor White
+        Write-Host "  OpenCode / Kilo Code 的 OpenAI 兼容地址: http://llm-gateway:4000/v1" -ForegroundColor Yellow
     }
 }
 

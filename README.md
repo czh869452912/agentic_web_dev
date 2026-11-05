@@ -9,9 +9,10 @@
 | 特性 | 说明 |
 |------|------|
 | **单端口入口** | 所有服务通过 8443 端口（HTTPS）访问 |
-| **Claude Code 内置** | Claude Code CLI 与 VS Code 在同一容器，终端直接使用 |
+| **OpenCode + Kilo Code** | OpenCode CLI 与 Kilo Code IDE 扩展内置于开发容器 |
+| **DSH + Univer Office** | 预装 DeepSeek Harness 与办公插件，支持表格、文档、演示文稿及预览 |
 | **嵌入式工具链** | ARM GCC 13.2、clang-tidy、cppcheck、OpenOCD 等内置于 IDE 容器 |
-| **完整扩展** | Cortex-Debug、CMake、GitLens、Cline 等 13+ 插件预装 |
+| **完整扩展** | Cortex-Debug、CMake、GitLens、Kilo Code 等 13+ 插件预装 |
 | **Web IDE** | 完整的 VS Code 功能（code-server） |
 | **离线友好** | 支持预下载镜像 + VSIX 离线部署 |
 
@@ -27,7 +28,7 @@
     Nginx 网关（单一入口）
        │
        ├── /          →  code-server（VS Code Web）
-       │                   ├── Claude Code CLI（claude 命令）
+       │                   ├── OpenCode CLI + Kilo Code 扩展
        │                   ├── ARM GCC 13.2 bare-metal 工具链
        │                   ├── clang / clang-format / clang-tidy / clangd
        │                   ├── cppcheck / valgrind / lcov / gcovr
@@ -37,6 +38,8 @@
        │                   ├── Sphinx / Breathe（API 文档生成）
        │                   ├── Google Test / Ceedling（C/C++ 单元测试）
        │                   └── 13+ VS Code 扩展
+       │
+       ├── /dsh/     →  DSH + Univer Office（在 IDE 终端运行 dsh-web）
        │
        ├── /files/    →  filebrowser（Web 文件管理）
        │
@@ -56,7 +59,7 @@ agentic_web_dev/
 ├── .gitattributes                  # 强制 .sh 文件使用 LF 行尾
 ├── docker/
 │   ├── docker-compose.yml
-│   ├── Dockerfile.code-server      # VS Code + Claude Code + 完整嵌入式工具链
+│   ├── Dockerfile.code-server      # VS Code + OpenCode / Kilo Code + 完整嵌入式工具链
 │   └── .env.example
 ├── configs/
 │   ├── nginx.conf
@@ -115,81 +118,66 @@ agentic_web_dev/
 
 | 服务 | 地址 |
 |------|------|
-| VS Code + Claude Code | https://localhost:8443/ |
+| VS Code + OpenCode / Kilo Code | https://localhost:8443/ |
 | 文件管理 | https://localhost:8443/files/ |
+| DSH + Univer Office（运行 `dsh-web` 后） | https://localhost:8443/dsh/（首次使用终端输出的完整登录地址） |
 | LiteLLM 网关（--llm 启用时） | https://localhost:8443/llm/ |
 
 默认密码：`docker/.env` 中的 `CODE_SERVER_PASSWORD`（默认 `changeme`）
 
 ---
 
-## API 配置
+## 使用 DSH + Univer Office
 
-Claude Code CLI 使用 **Anthropic API 协议**（非 OpenAI 兼容格式）。编辑 `docker/.env`：
+开发镜像预装 `@deepseek-ai/dsh@0.2.1-rc.3` 和 `dsh-univer-office@0.4.0`，插件安装在 DSH 的 `web` profile 中。Node.js 升级至 24，并安装 Chromium 和中文字体，用于插件截图、PDF 打印及幻灯片布局检查。这是 DSH 插件，无需安装 VSIX。
 
-### 方案 A：使用 Anthropic 官方 API
-
-```bash
-ANTHROPIC_API_KEY=sk-ant-api03-...
-ANTHROPIC_BASE_URL=          # 留空，使用默认
-```
-
-### 方案 B：使用内网 Anthropic 格式代理
-
-内网代理必须实现 Anthropic 消息协议（`POST /v1/messages`），而非 OpenAI 的 `/v1/chat/completions`。
+已有部署需要先重新构建镜像并重建 code-server 容器：
 
 ```bash
-ANTHROPIC_API_KEY=your-proxy-key
-ANTHROPIC_BASE_URL=http://10.0.0.100:8000
+./scripts/manage.sh build
+./scripts/manage.sh up
+docker compose -f docker/docker-compose.yml restart gateway
+# Windows PowerShell：
+# .\scripts\manage.ps1 build
+# .\scripts\manage.ps1 up
+# docker compose -f docker/docker-compose.yml restart gateway
 ```
 
-### 方案 C：LiteLLM 统一网关（内网 OpenAI 兼容 API）
+重启网关以加载新增的 `/dsh/` 路由；docker-only 部署使用 `docker restart dev-gateway`。
 
-内网只有 OpenAI 兼容 API？使用内置 LiteLLM 服务同时暴露 Anthropic 和 OpenAI 两种格式，Claude Code、Cline、Roo Code 均可通过统一 key 访问，无需单独登录。
+在 VS Code 集成终端中启动（保持该终端运行，Ctrl+C 停止）：
 
 ```bash
-# 1. 创建 LiteLLM 配置
-cp configs/litellm_config.yaml.example configs/litellm_config.yaml
-# 编辑填写内网 API 地址和模型名
+# 本机访问
+dsh-web
 
-# 2. 配置 .env
-ANTHROPIC_BASE_URL=http://llm-gateway:4000   # 容器内直连
-ANTHROPIC_API_KEY=sk-devenv                  # 与 LITELLM_MASTER_KEY 相同
-LITELLM_MASTER_KEY=sk-devenv
-INTERNAL_API_BASE=http://10.0.0.100:8000
-INTERNAL_API_KEY=your-internal-key
-
-# 3. 启动时加 --llm 标志
-./scripts/manage.sh up --llm
+# 远程部署：传入浏览器实际访问的 HTTPS 根地址，包含自定义端口
+dsh-web https://your-server.example:8443
 ```
 
-访问 `https://localhost:8443/llm/` 可通过 nginx 代理使用 LiteLLM（OpenAI/Anthropic 双格式）。
+打开终端打印的完整 `/dsh/` 登录地址（包含进程令牌），随后在 DSH 的 **Settings → Models** 配置模型，并选择 `/workspace` 作为工作目录。DSH 模型认证需要单独配置。可要求它创建表格、文档或幻灯片，并在会话内预览、确认或丢弃修改。
 
-### 方案 D：不预配置（交互式登录）
+DSH 仅在执行 `dsh-web` 后运行。Nginx 通过现有 HTTPS 端口转发页面、API 和 WebSocket；未启动时 `/dsh/` 返回 502。无需额外映射 3080 或插件内部 9080 端口。
 
-不填任何 API 配置，启动后在 VS Code 终端执行 `claude`，按提示完成认证。
+DSH 配置、会话和插件保存在 `dsh-data` 数据卷（`/var/lib/dsh`），首次创建卷时自动从镜像填充。重建容器会保留数据；已有卷也会保留其中的插件版本。后续如需升级插件，先停止 DSH，再在 IDE 终端执行 `dsh plugin --profile web add dsh-univer-office@<兼容版本>`，然后重新运行 `dsh-web`。该升级步骤需要联网，日常启动不需要重新下载插件。
+
+官方说明：[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)、[Univer Office 插件](https://github.com/dream-num/dsh-univer-office)、[反向代理部署](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/guide/public-deployments.md)。
 
 ---
 
-## 使用 Claude Code
+## 使用 OpenCode 与 Kilo Code
 
-启动后在 VS Code 集成终端（Ctrl+` 打开）中：
+在 VS Code 集成终端执行 `opencode` 启动编程会话。Kilo Code 通过侧边栏使用，扩展 ID 为 `kilocode.kilo-code`。OpenCode GUI 扩展仍保留在线尝试安装和 VSIX 安装入口。
 
-```bash
-# 启动交互式会话
-claude
+两个工具分别配置提供商、API Key 和模型。自建 OpenAI Chat Completions 兼容接口可在 Kilo Code 的 Providers 页面添加 Custom provider，选择 OpenAI Compatible；OpenCode 按其提供商配置填写相同接口。
 
-# 让 Claude 审查/编辑文件
-claude src/main.c
+需要统一模型入口时，复制并编辑 `configs/litellm_config.yaml.example`，填写 `docker/.env` 中的 `INTERNAL_API_BASE`、`INTERNAL_API_KEY`、`LITELLM_MASTER_KEY`，然后运行 `./scripts/manage.sh up --llm`（Windows 使用 `up -Llm`）。容器内 Base URL 为 `http://llm-gateway:4000/v1`，Key 为 `LITELLM_MASTER_KEY`，模型选择模板中的 `internal-agent` 或自定义 `model_name`。
 
-# 查看当前配置
-claude config get
+详细步骤见 [配置指南](CONFIGURATION.md)。
 
-# 切换模型
-claude config set model claude-sonnet-4-6
-```
+## 从旧版本升级
 
-> Claude Code 通过终端 CLI 使用。`anthropic.claude-code` 官方 VS Code 扩展与当前 code-server 版本不兼容，已预装 Cline（`saoudrizwan.claude-dev`）作为可视化 AI 助手备选。
+重新构建镜像并运行 `up` 重建 code-server，随后运行 `docker restart dev-gateway`。镜像不再安装 Claude Code CLI、Claude Code 扩展、Cline 和 Roo Code，也不再注入相关 API 环境变量或挂载专用配置卷。容器启动会自动卸载持久化扩展卷中的这三个旧扩展；旧配置与会话数据保留。当前项目和 Git 历史未发现 CC Switch 安装入口。
 
 ---
 
@@ -258,7 +246,8 @@ conan install .          # Conan 包管理
 ### AI 编程助手
 | 扩展 | ID |
 |------|-----|
-| Cline | `saoudrizwan.claude-dev` |
+| Kilo Code | `kilocode.kilo-code` |
+| OpenCode GUI（可选） | `TanishqKancharla.opencode-vscode` |
 
 ### 嵌入式 / C/C++ 开发
 | 扩展 | ID |
@@ -287,7 +276,7 @@ conan install .          # Conan 包管理
 | Code Spell Checker | `streetsidesoftware.code-spell-checker` |
 | Material Icon Theme | `pkief.material-icon-theme` |
 
-> **说明**：`anthropic.claude-code` 与 code-server v4.21.0 不兼容未安装；`ms-vscode.cpptools-extension-pack` 在 code-server marketplace 中不可用。C/C++ IntelliSense 由 `llvm-vs-code-extensions.vscode-clangd` + 镜像内置 `clangd` 二进制提供，开箱即用。
+> **说明**：C/C++ IntelliSense 使用 clangd；Kilo Code 安装失败会中断构建，其他可选扩展可跳过。
 
 ---
 
@@ -356,7 +345,7 @@ cp docker/.env.example docker/.env
 
 ## 云端部署 SSL 配置
 
-将 code-server 部署在云端服务器（公网 IP 或内网固定 IP）时，本地浏览器通过 `https://<server-ip>:8443` 访问，需要额外处理 SSL 信任问题，否则 VS Code 插件（如 Cline）使用的 Service Worker 会因证书不可信而报错：
+将 code-server 部署在云端服务器（公网 IP 或内网固定 IP）时，本地浏览器通过 `https://<server-ip>:8443` 访问，需要额外处理 SSL 信任问题，否则 VS Code 插件（如 Kilo Code）使用的 Service Worker 会因证书不可信而报错：
 
 > `SecurityError: Failed to register a ServiceWorker … An SSL certificate error occurred`
 
@@ -452,7 +441,7 @@ Firefox 使用独立证书库，需手动导入：
 
 首次访问时浏览器会显示"不安全"警告：
 1. 点击"高级" → "继续访问"
-2. **此方式对 Service Worker 无效**，Cline 等插件的 webview 仍会报 SSL 错误
+2. **此方式对 Service Worker 无效**，Kilo Code 等插件的 webview 仍会报 SSL 错误
 
 结论：若需要插件正常工作，必须使用方案一或方案二。
 
@@ -472,17 +461,9 @@ Firefox 使用独立证书库，需手动导入：
 
 ## 故障排除
 
-### Claude Code 无法连接 API
+### AI 工具无法连接模型
 
-```bash
-# 进入 code-server 容器检查
-docker exec -it code-server bash
-claude config get
-
-# 检查环境变量是否注入
-echo $ANTHROPIC_API_KEY
-echo $ANTHROPIC_BASE_URL
-```
+在 OpenCode / Kilo Code 中检查提供商、Base URL、Key 和模型 ID，并确认容器可以访问模型服务。DSH 在自己的 Settings → Models 中单独配置。详见 [配置指南](CONFIGURATION.md)。
 
 ### VS Code 扩展不工作
 
@@ -568,6 +549,10 @@ docker logs dev-gateway
 ---
 
 ## 更新日志
+
+### 2026-11-05
+- 保留 OpenCode，新增 Kilo Code 扩展；移除 Claude Code、Cline、Roo Code 的安装与专用配置。
+- 新增 DSH + Univer Office、持久化数据和 `/dsh/` 网关入口。
 
 ### v4.2.0 (2026-03-10)
 - 新增：`scripts/fix-line-endings.sh`，一键清理跨平台编辑引入的 CRLF 行尾和 UTF-8 BOM，防止配置文件在 Linux 上损坏

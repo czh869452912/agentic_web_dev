@@ -15,7 +15,7 @@
 ./scripts/manage.sh down
 
 # 进入容器
-./scripts/manage.sh shell code-server    # VS Code + Claude Code + 嵌入式工具链
+./scripts/manage.sh shell code-server    # VS Code + OpenCode / Kilo Code + 嵌入式工具链
 ```
 
 ### Windows (PowerShell)
@@ -33,6 +33,7 @@
 | 服务 | 地址 |
 |------|------|
 | VS Code Web | https://localhost:8443/ |
+| DSH 办公（手动启动后，首次使用终端输出的完整地址） | https://localhost:8443/dsh/ |
 | 文件管理 | https://localhost:8443/files/ |
 | LiteLLM 网关（--llm 启用时） | https://localhost:8443/llm/ |
 | 健康检查 | https://localhost:8443/health |
@@ -41,48 +42,14 @@
 
 ---
 
-## API 配置 (docker/.env)
+## AI 工具
 
-```bash
-# 方案 A：Anthropic 官方 API
-ANTHROPIC_API_KEY=sk-ant-api03-...
+- OpenCode：在 IDE 终端运行 `opencode`，配置提供商及模型。
+- Kilo Code：打开侧边栏，在 Providers 中配置模型；自建接口可选 OpenAI Compatible。
+- DSH + Univer Office：终端运行 `dsh-web`，远程部署传入 `https://服务器地址:8443`；打开输出的完整登录地址，在 Settings → Models 配置模型。
+- 可选 LiteLLM：复制并编辑 `configs/litellm_config.yaml.example`，配置 `docker/.env` 的 `INTERNAL_API_BASE`、`INTERNAL_API_KEY`、`LITELLM_MASTER_KEY`，使用 `up --llm`（Windows `up -Llm`）。容器内兼容 API 地址为 `http://llm-gateway:4000/v1`。
 
-# 方案 B：内网代理（须实现 Anthropic /v1/messages 协议）
-ANTHROPIC_API_KEY=your-key
-ANTHROPIC_BASE_URL=http://10.0.0.100:8000
-
-# 方案 C：LiteLLM 统一网关（内网 OpenAI 兼容 API）
-# cp configs/litellm_config.yaml.example configs/litellm_config.yaml  # 编辑后
-# ./scripts/manage.sh up --llm
-ANTHROPIC_BASE_URL=http://llm-gateway:4000
-ANTHROPIC_API_KEY=sk-devenv   # 与 LITELLM_MASTER_KEY 一致
-
-# 方案 D：不填则启动后交互式登录（在 VS Code 终端运行 claude 命令）
-```
-
----
-
-## Claude Code 用法（在 VS Code 终端中运行）
-
-> Claude Code 以 CLI 形式集成，在 VS Code 内置终端直接使用。
-
-```bash
-# 首次使用：交互式登录
-claude
-
-# 启动对话
-claude
-
-# 直接处理单个文件
-claude src/main.c
-
-# 查看/修改配置
-claude config get
-claude config set model claude-sonnet-4-6
-
-# 验证安装
-claude --version
-```
+详见 [配置指南](CONFIGURATION.md)。升级时重新构建并运行 `up`，再 `docker restart dev-gateway`。旧 AI 扩展会在启动时自动卸载。
 
 ---
 
@@ -155,7 +122,7 @@ conan install .
 
 | 类别 | 扩展 |
 |------|------|
-| AI | `saoudrizwan.claude-dev`（Cline，可调用 Claude API） |
+| AI | `kilocode.kilo-code`（Kilo Code）、OpenCode GUI（可选） |
 | 嵌入式调试 | `marus25.cortex-debug` |
 | ARM 汇编 | `dan-c-underwood.arm` |
 | 链接脚本 | `zixuanwang.linkerscript` |
@@ -166,7 +133,6 @@ conan install .
 | Git | `eamodio.gitlens`、`mhutchie.git-graph` |
 | 生产力 | `usernamehw.errorlens`、`christian-kohler.path-intellisense`、`pkief.material-icon-theme` |
 
-> **注意**：`anthropic.claude-code` 官方扩展与当前 code-server 版本不兼容，Claude Code 通过 CLI（`claude` 命令）使用。
 
 ---
 

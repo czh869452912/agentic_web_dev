@@ -1,6 +1,6 @@
 # ============================================================
 # 内网 Agentic 云开发环境 - Docker Compose 配置
-# 架构：Nginx 网关 → code-server（内置 Claude Code + 嵌入式工具链）
+# 架构：Nginx 网关 → code-server（内置 OpenCode / Kilo Code + 嵌入式工具链）
 # ============================================================
 
 services:
@@ -32,7 +32,7 @@ services:
       retries: 3
 
   # ==========================================================
-  # 2. Code Server：Web 版 VS Code + Claude Code CLI（核心）
+  # 2. Code Server：Web 版 VS Code + OpenCode / Kilo Code（核心）
   # ==========================================================
   code-server:
     build:
@@ -44,15 +44,11 @@ services:
     environment:
       - PASSWORD=${CODE_SERVER_PASSWORD:-changeme}
       - SUDO_PASSWORD=${SUDO_PASSWORD:-changeme}
-      # Claude Code API 配置（直接用 Anthropic 官方环境变量）
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
-      # 若使用兼容 Anthropic API 格式的内网代理，设置以上两项
     volumes:
       - ../workspace:/workspace
       - code-extensions:/home/coder/.local/share/code-server/extensions
       - code-config:/home/coder/.config/code-server
-      - claude-config:/home/coder/.claude
+      - dsh-data:/var/lib/dsh
     networks:
       devnet:
         aliases:
@@ -88,7 +84,7 @@ services:
   # ==========================================================
   # 4. LiteLLM 统一 LLM 网关（可选，--profile llm 启用）
   #    同时暴露 Anthropic /v1/messages 和 OpenAI /v1/chat/completions
-  #    Claude Code、Cline、Roo Code 均可通过统一 key 访问内网 LLM
+  #    OpenCode、Kilo Code 可通过统一 key 访问内网 LLM
   # ==========================================================
   llm-gateway:
     image: ghcr.io/berriai/litellm:main-latest
@@ -125,6 +121,6 @@ networks:
 volumes:
   code-extensions:
   code-config:
-  claude-config:
+  dsh-data:
   filebrowser-db:
   litellm-cache:

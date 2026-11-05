@@ -18,7 +18,7 @@
 
 | 文件 | 用途 | 实测大小 |
 |------|------|----------|
-| `docker/Dockerfile.code-server` | VS Code + Claude Code CLI + 完整嵌入式工具链 + 13+ 扩展 | ~5GB |
+| `docker/Dockerfile.code-server` | VS Code + OpenCode CLI + Kilo Code + DSH + 完整嵌入式工具链 + 13+ 扩展 | ~5GB |
 | `docker/docker-compose.yml` | 服务编排（3 个核心服务 + 可选 llm-gateway，profile: llm） | - |
 
 ## 脚本
@@ -27,7 +27,9 @@
 |------|------|
 | `scripts/manage.sh` | Linux/macOS 环境管理脚本 |
 | `scripts/manage.ps1` | Windows PowerShell 环境管理脚本 |
-| `scripts/code-server-entrypoint.sh` | code-server 容器启动脚本（配置 Claude Code 后启动 code-server） |
+| `scripts/code-server-entrypoint.sh` | code-server 容器启动脚本（同步预装扩展、卸载旧 AI 扩展后启动 code-server） |
+| `scripts/dsh-web.sh` | DSH Web 启动与公网访问地址配置 |
+| `scripts/dsh-chromium.sh` | 办公插件的容器内 Chromium 渲染入口 |
 | `scripts/test-docker-build.sh` | 镜像构建验证测试脚本 |
 | `scripts/fix-line-endings.sh` | 清理 CRLF 行尾和 UTF-8 BOM（跨平台编辑后在 Linux 上运行） |
 
@@ -63,11 +65,11 @@
 ## 首次部署检查清单
 
 - [ ] 复制 `docker/.env.example` 为 `docker/.env`
-- [ ] 编辑 `docker/.env` 配置 `ANTHROPIC_API_KEY` 或 `ANTHROPIC_BASE_URL`
+- [ ] 编辑 `docker/.env` 配置登录密码；模型在各工具中配置
 - [ ] 运行 `build` 构建镜像（需要网络）
 - [ ] 运行 `up` 启动服务（自动生成 SSL）
 - [ ] 访问 https://localhost:8443/ 输入密码
-- [ ] 在 VS Code 终端运行 `claude` 验证 Claude Code
+- [ ] 在 VS Code 终端运行 `opencode`，打开 Kilo Code 扩展并配置模型
 
 ---
 

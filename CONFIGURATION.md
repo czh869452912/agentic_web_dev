@@ -1,216 +1,71 @@
 # 配置指南
 
-## 快速配置步骤
+## 服务配置
 
-### 1. 初始化
-
-```bash
-./scripts/manage.sh init      # Linux/macOS
-.\scripts\manage.ps1 init     # Windows
-```
-
-这会创建 `docker/.env` 文件。
-
-### 2. 配置 API
-
-编辑 `docker/.env`：
+复制 `docker/.env.example` 为 `docker/.env`，修改 `CODE_SERVER_PASSWORD`、`SUDO_PASSWORD`。默认 HTTPS 端口由 `GATEWAY_PORT` 控制，云端部署还可填写 `SERVER_DOMAIN`。
 
 ```bash
-# ---- 服务访问 ----
-GATEWAY_PORT=8443
-CODE_SERVER_PASSWORD=YourSecurePassword
-SUDO_PASSWORD=YourSudoPassword
-
-# ---- Claude Code API ----
-ANTHROPIC_API_KEY=
-ANTHROPIC_BASE_URL=
-```
-
-### 3. 启动
-
-```bash
+./scripts/manage.sh init
+./scripts/manage.sh build
 ./scripts/manage.sh up
-# 会自动生成 SSL 证书（如果不存在）
 ```
 
----
+Windows 使用 `.\scripts\manage.ps1 init`、`build`、`up`。
 
-## Claude Code API 配置详解
+## OpenCode
 
-Claude Code CLI（`@anthropic-ai/claude-code`）使用 **Anthropic 专有协议**，核心端点为：
+在 IDE 终端执行 `opencode`，通过其提供商配置连接模型。使用自建接口时，按 [OpenCode 提供商文档](https://opencode.ai/docs/providers/) 配置兼容提供商、Base URL、API Key 和模型 ID。
 
-```
-POST /v1/messages
-```
+## Kilo Code
 
-这与 OpenAI 兼容格式（`POST /v1/chat/completions`）不同。
+镜像安装官方扩展 `kilocode.kilo-code`。打开 Kilo Code 设置的 Providers 页面，配置提供商和模型；自建 Chat Completions 接口选择 OpenAI Compatible，填写 Base URL、API Key 和模型 ID。新版界面可通过 Custom provider 添加。
 
-### 方案 A：Anthropic 官方 API（有公网访问）
+容器内的扩展后端可以直连 `http://llm-gateway:4000/v1` 或内网模型地址。不要使用容器内的 `localhost` 指向宿主机服务。模型请求及其工具调用能力取决于所选提供商。
+
+参考：[Kilo Code 自定义提供商](https://kilo.ai/docs/ai-providers/openai-compatible)。
+
+## DSH + Univer Office
+
+在 IDE 终端执行 `dsh-web`，远程部署执行 `dsh-web https://服务器地址:8443`。打开终端输出的完整登录地址，在 Settings → Models 配置模型，选择 `/workspace` 工作区。
+
+DSH 使用独立模型配置，数据保存在 `dsh-data` 卷的 `/var/lib/dsh`。办公插件已安装在 web profile；截图和 PDF 功能使用镜像内置 Chromium。
+
+## 可选 LiteLLM 网关
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-api03-...
-ANTHROPIC_BASE_URL=          # 留空，使用默认 https://api.anthropic.com
-```
-
-### 方案 B：内网 Anthropic 格式代理
-
-适用于将 Anthropic API 请求转发到内网大模型的场景（如通过 LiteLLM、one-api 等代理工具）：
-
-```bash
-ANTHROPIC_API_KEY=your-proxy-key
-ANTHROPIC_BASE_URL=http://10.0.0.100:8000
-```
-
-**注意**：代理必须支持 Anthropic 消息格式，即实现 `POST /v1/messages` 接口。
-
-代理工具推荐：
-- [LiteLLM Proxy](https://docs.litellm.ai/docs/proxy/quick_start)（支持将 Anthropic 格式转发到任意模型）
-- [one-api](https://github.com/songquanpeng/one-api)
-
-### 方案 C：LiteLLM 统一网关（内网 OpenAI 兼容 API）
-
-内网只有 OpenAI 兼容 API 时，通过内置 LiteLLM 进行协议转换。同时暴露 Anthropic 格式供 Claude Code 使用，OpenAI 格式供 Cline / Roo Code 使用，统一 API key 无需单独登录。
-
-```bash
-# 1. 创建 LiteLLM 配置
 cp configs/litellm_config.yaml.example configs/litellm_config.yaml
-# 编辑：替换 YOUR_INTERNAL_MODEL、INTERNAL_API_BASE、INTERNAL_API_KEY
-
-# 2. docker/.env
-ANTHROPIC_BASE_URL=http://llm-gateway:4000   # code-server 容器内直连（推荐）
-ANTHROPIC_API_KEY=sk-devenv                  # 与 LITELLM_MASTER_KEY 相同
-LITELLM_MASTER_KEY=sk-devenv
-INTERNAL_API_BASE=http://10.0.0.100:8000
-INTERNAL_API_KEY=your-internal-key
-
-# 3. 启动
+# 编辑模板里的 YOUR_INTERNAL_MODEL，替换为实际模型 ID
+# 在 docker/.env 中配置 INTERNAL_API_BASE、INTERNAL_API_KEY、LITELLM_MASTER_KEY
 ./scripts/manage.sh up --llm
 ```
 
-Cline / Roo Code 插件配置（使用 nginx 代理外部访问）：
-- Base URL：`https://<host>:8443/llm/v1`
-- API Key：`sk-devenv`
+Windows 使用 `Copy-Item` 复制模板，随后 `.\scripts\manage.ps1 up -Llm`。
 
-### 方案 D：不预配置（交互式登录）
+| 设置 | 值 |
+|------|----|
+| 容器内 Base URL | `http://llm-gateway:4000/v1` |
+| 外部 HTTPS Base URL | `https://服务器地址:8443/llm/v1` |
+| API Key | `docker/.env` 中的 `LITELLM_MASTER_KEY` |
+| 模型 ID | `configs/litellm_config.yaml` 中的 `model_name` |
 
-不填任何 API 配置，启动服务后在 VS Code 终端执行：
+模型配置在各工具中分别保存；管理脚本不再向容器注入某个智能体专用的 API 配置，也不提供旧的 `test-api` 和 `update-config` 命令。
 
-```bash
-claude
-```
+## 更新已有部署
 
-按提示完成 Anthropic 账户登录（需要公网访问 claude.ai）。
-
----
-
-## 配置生效方式
-
-API 配置通过环境变量注入 code-server 容器，容器启动脚本 `/opt/entrypoint.sh` 自动将其写入 `/root/.claude/settings.json`（容器以 root 身份运行）。
-
-查看当前配置：
-
-```bash
-# 在 VS Code 终端中
-claude config get
-
-# 或直接查看文件
-cat /root/.claude/settings.json
-```
-
-修改配置后需重启服务：
-
-```bash
-./scripts/manage.sh down
-./scripts/manage.sh up
-```
-
----
-
-## 常见场景
-
-### 场景 1：LiteLLM 代理转发到 DeepSeek
-
-```bash
-# LiteLLM 配置（proxy_config.yaml）
-model_list:
-  - model_name: claude-3-5-sonnet
-    litellm_params:
-      model: deepseek/deepseek-chat
-      api_key: your-deepseek-key
-
-# docker/.env
-ANTHROPIC_API_KEY=any-string
-ANTHROPIC_BASE_URL=http://10.0.0.50:4000
-```
-
-### 场景 2：Anthropic 官方 API（直连）
-
-```bash
-ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxx
-# ANTHROPIC_BASE_URL 留空
-```
-
-### 场景 3：内网无外网访问
-
-必须有一个实现 Anthropic `/v1/messages` 协议的内网服务，或使用 LiteLLM 之类的转换层。
-
----
+重新构建镜像，执行 `up` 重建 code-server，然后执行 `docker restart dev-gateway` 加载网关配置。启动时会自动卸载旧扩展卷中的 Claude Code、Cline 和 Roo Code 扩展。旧的专用配置卷不再挂载；历史配置和会话数据保留，避免升级误删。
 
 ## 故障排除
 
-### Claude Code 无法使用
-
-1. **检查容器内环境变量**
-   ```bash
-   docker exec code-server bash -c "echo $ANTHROPIC_API_KEY && echo $ANTHROPIC_BASE_URL"
-   ```
-
-2. **检查配置文件**
-   ```bash
-   docker exec code-server cat /root/.claude/settings.json
-   ```
-
-3. **手动测试 API**（在容器终端）
-   ```bash
-   claude config get
-   claude "hello"
-   ```
-
-### VS Code 无法访问
-
-1. **检查 SSL 证书**
-   ```bash
-   ls configs/ssl/
-   ```
-   如果不存在：`./scripts/manage.sh ssl`
-
-2. **检查 gateway 日志**
-   ```bash
-   docker logs dev-gateway
-   ```
-
-3. **检查 code-server 状态**
-   ```bash
-   docker logs code-server
-   ```
-
----
-
-## 安全注意事项
-
-1. **不要提交 `.env` 文件**（已在 `.gitignore` 中）
-2. **生产环境修改默认密码**：`CODE_SERVER_PASSWORD`
-3. **IP 白名单**（可选）：在 `configs/nginx.conf` 的 server 块中添加
-   ```nginx
-   allow 10.0.0.0/8;
-   deny all;
-   ```
-4. **HTTPS 证书**：自签名证书仅适合内网使用，生产环境建议替换为正式证书
-
----
+- Kilo Code 安装失败会中断构建；检查 Open VSX 网络及 code-server 的 VS Code 版本兼容性。
+- 插件页面空白或 Service Worker 失败：让浏览器信任 HTTPS 证书，详见 README 的 SSL 配置。
+- 模型无法连接：检查该工具中的 Base URL、Key、模型 ID，并确认容器可以访问该地址。
+- `/dsh/` 返回 502：先在 IDE 终端运行 `dsh-web`，并保持该终端运行。
+- 查看容器日志：`docker logs code-server`、`docker logs dev-gateway`。
 
 ## 参考
 
-- [Claude Code 文档](https://docs.anthropic.com/en/docs/claude-code)
-- [Anthropic API 参考](https://docs.anthropic.com/en/api/messages)
-- [LiteLLM Proxy 文档](https://docs.litellm.ai/docs/proxy/quick_start)
+- [OpenCode](https://opencode.ai/docs/)
+- [Kilo Code](https://github.com/Kilo-Org/kilocode)
+- [DSH](https://github.com/deepseek-ai/deepseek-harness)
+- [Univer Office](https://github.com/dream-num/dsh-univer-office)
+- [LiteLLM](https://docs.litellm.ai/docs/proxy/quick_start)
