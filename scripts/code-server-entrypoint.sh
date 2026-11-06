@@ -24,6 +24,7 @@ for extension_id in anthropic.claude-code saoudrizwan.claude-dev RooVeterinaryIn
 done
 
 # ---- 启动 code-server ----
+PROXY_DOMAIN="$(node /opt/dsh-browser-compat/forwarding.mjs domain)"
 exec dumb-init /usr/bin/code-server \
     --bind-addr 0.0.0.0:8080 \
     --extensions-dir "$EXT_DIR" \
@@ -31,4 +32,5 @@ exec dumb-init /usr/bin/code-server \
     --disable-telemetry \
     --disable-update-check \
     --auth password \
+    --proxy-domain "$PROXY_DOMAIN" \
     "$@"

@@ -2,16 +2,16 @@
 
 ## 预装扩展列表
 
-构建时通过 `code-server --install-extension` 自动安装以下扩展（Kilo Code 必须安装成功；其他可选扩展安装失败会跳过）：
+以下为 Dockerfile 配置的安装清单，构建时通过 Open VSX 尝试安装。Kilo Code 必须安装成功，其他可选扩展安装失败可跳过。实际版本以构建日志和扩展管理器为准；2026-11-06 的镜像快照见 [兼容性指南](docs/compatibility.md#构建结果)。
 
 ### AI 编程助手
 
 | 扩展 ID | 名称 | 说明 |
 |---------|------|------|
 | `kilocode.kilo-code` | Kilo Code | 核心 IDE 编程智能体，通过 Open VSX 安装 |
-| `TanishqKancharla.opencode-vscode` | opencode GUI | opencode CLI 的 VS Code 图形界面；**VSIX only**，不在 Open VSX |
+| `TanishqKancharla.opencode-vscode` | OpenCode GUI | 在线尝试安装；不可用时通过 VSIX 安装，本次镜像已在线安装 0.4.4 |
 
-> **opencode CLI**：容器内已预装 `opencode` 命令（`npm install -g opencode-ai`）。GUI 扩展需将 VSIX 放入 `configs/vsix/` 后重新构建。
+> OpenCode CLI 通过 npm 单独安装，命令为 `opencode`。DSH 和 Univer Office 也已内置，但 Office 是 DSH web profile 插件，不是 VS Code 扩展。
 
 ### 嵌入式 / C/C++ 开发
 
@@ -21,10 +21,10 @@
 | `marus25.cortex-debug` | ARM Cortex-M 调试（配合 OpenOCD/JLink） |
 | `dan-c-underwood.arm` | ARM 汇编语法高亮 |
 | `zixuanwang.linkerscript` | 链接器脚本（.ld）语法支持 |
-| `ms-vscode.cmake-tools` | CMake 项目支持（MS-only，Open VSX 不可用，会跳过） |
+| `ms-vscode.cmake-tools` | CMake 项目支持；本次镜像已在线安装 1.24.42 |
 | `twxs.cmake` | CMake 语法高亮 |
 
-> **说明**：`ms-vscode.cpptools-extension-pack` 和 `ms-vscode.cmake-tools` 是微软专有插件，不发布到 Open VSX Registry，code-server 无法从 marketplace 安装。C/C++ IntelliSense 由 `vscode-clangd` 提供（容器内已预装 clangd 二进制）。如需完整 cpptools，可将 VSIX 放入 `configs/vsix/` 目录后重新构建。
+> C/C++ IntelliSense 使用 `vscode-clangd`，容器内已安装 clangd 二进制。`cpptools` 及其扩展包不在默认清单中；额外 VSIX 应确认与 code-server、容器架构及其使用条件兼容。在线可用性以实际构建结果为准。
 
 ### 测试与覆盖率
 
@@ -59,7 +59,7 @@
 | `bierner.markdown-mermaid` | Markdown Mermaid | Markdown 预览中渲染 Mermaid 图表 |
 | `yzhang.markdown-all-in-one` | Markdown All in One | TOC、快捷键、预览增强 |
 
-> **需求管理**：容器内预装 `doorstop` CLI（`pip3 install doorstop`），用于基于文本文件的需求追踪。`pandoc` 已预装，可将需求导出为 PDF/HTML/Word。
+> 容器内预装 `doorstop`，用于基于文本文件的需求追踪。Python 工具在 `/opt/dev-python` 虚拟环境中，已加入 PATH。`pandoc` 也已预装，具体导出格式仍取决于相应渲染依赖。
 
 ### 生产力
 
@@ -75,48 +75,21 @@
 
 ## 离线安装扩展
 
-在无法访问 VS Code Marketplace 的内网环境中，需要预先下载 `.vsix` 文件。
+联网构建后的镜像已含成功安装的扩展，运行时不需重新下载。需要补充或覆盖扩展时，预先下载匹配目标容器架构和内置 Code 版本的 `.vsix`；构建与运行时安装步骤见 [VSIX 指南](configs/vsix/README.md)。
 
-### 步骤
+## seed 与已有数据卷
 
-1. **在外网下载 VSIX**
+扩展构建时安装到 `/opt/code-server-extensions-seed`；启动时合并到 `/home/coder/.local/share/code-server/extensions` 的持久化卷。合并不覆盖已存在的文件，不能据此认定运行中的扩展已全部更新。
 
-   从 VS Code Marketplace 网站下载：
-   ```
-   https://marketplace.visualstudio.com/items?itemName=<扩展ID>
-   ```
-   点击页面中的 "Download Extension" 链接。
-
-   或通过命令行：
-   ```bash
-   # 示例：下载 C/C++ 扩展包（需替换实际版本号）
-   wget "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/ms-vscode/vsextensions/cpptools/latest/vspackage" \
-     -O ms-vscode.cpptools.vsix
-   ```
-
-2. **放入 configs/vsix/ 目录**
-
-   ```
-   configs/vsix/
-   ├── ms-vscode.cpptools-1.x.x.vsix
-   └── ms-vscode.cpptools-extension-pack-x.x.x.vsix
-   ```
-
-3. **构建时自动安装**
-
-   Dockerfile 会自动检测并安装该目录下所有 `.vsix` 文件。
-
-### 在运行中的容器里手动安装
+核对运行时版本：
 
 ```bash
-# 将 VSIX 文件复制到容器
-docker cp my-extension.vsix code-server:/tmp/
-
-# 在容器内安装
-docker exec code-server code-server --install-extension /tmp/my-extension.vsix
-
-# 刷新浏览器即可看到新扩展
+docker exec code-server code-server --extensions-dir /home/coder/.local/share/code-server/extensions --list-extensions --show-versions
 ```
+
+启动时通过扩展管理器卸载旧数据卷中的 Claude Code、Cline、Roo Code 扩展，不删除其历史设置。用户设置的持久化范围和重建前备份见 [配置指南](CONFIGURATION.md#数据持久化)。
+
+DSH 的兼容注入不进入 Kilo 或其他扩展网页视图。扩展安装成功不代表 Chromium 108/Win7 的模型、工具和 diff 流程已经验收，见 [兼容性边界](docs/compatibility.md#尚未覆盖)。
 
 ---
 
@@ -125,8 +98,6 @@ docker exec code-server code-server --install-extension /tmp/my-extension.vsix
 ### Kilo Code 连接模型
 
 在扩展的 Providers 页面配置提供商、Key 和模型。自建 Chat Completions 接口选择 OpenAI Compatible。启用 LiteLLM 后，容器内地址为 `http://llm-gateway:4000/v1`，Key 为 `.env` 的 `LITELLM_MASTER_KEY`。详见 [配置指南](CONFIGURATION.md)。
-
-容器启动时通过扩展管理器卸载旧数据卷中的 Claude Code、Cline、Roo Code 扩展，同时保留用户配置和会话。
 
 ### Cortex-Debug 配置示例
 

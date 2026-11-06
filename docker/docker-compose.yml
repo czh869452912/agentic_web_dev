@@ -44,6 +44,8 @@ services:
     environment:
       - PASSWORD=${CODE_SERVER_PASSWORD:-changeme}
       - SUDO_PASSWORD=${SUDO_PASSWORD:-changeme}
+      - GATEWAY_PORT=${GATEWAY_PORT:-8443}
+      - CODE_SERVER_PROXY_DOMAIN=${CODE_SERVER_PROXY_DOMAIN:-}
     volumes:
       - ../workspace:/workspace
       - code-extensions:/home/coder/.local/share/code-server/extensions

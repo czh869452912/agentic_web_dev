@@ -99,7 +99,10 @@ RUN cd /usr/src/googletest \
 # ============================================================
 # Python 工具
 # ============================================================
-RUN pip3 install --no-cache-dir --break-system-packages \
+# 与 Debian 自带的 Python 包隔离，避免 pip 卸载缺少 RECORD 的 apt 包。
+RUN python3 -m venv /opt/dev-python
+ENV PATH="/opt/dev-python/bin:${PATH}"
+RUN pip install --no-cache-dir \
     gcovr \
     pyserial \
     pyelftools \
@@ -141,23 +144,24 @@ RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - \
 
 # DSH + Univer Office：构建时安装，运行时无需联网下载插件。
 # named volume 首次创建时由 Docker 自动填充镜像内的 /var/lib/dsh。
-ARG DSH_VERSION=0.2.1-rc.3
-ARG DSH_UNIVER_OFFICE_VERSION=0.4.0
-ARG DSH_PNPM_VERSION=11.23.0
+ARG DSH_VERSION=latest
+ARG DSH_UNIVER_OFFICE_VERSION=latest
+ARG DSH_PNPM_VERSION=latest
 ENV DSH_HOME=/var/lib/dsh
 ENV UNIVER_RENDER_BROWSER=/usr/local/bin/dsh-chromium
-RUN apt-get update && apt-get install -y --no-install-recommends chromium fonts-noto-cjk \
+# 浏览器大包使用官方 HTTPS 源，避免 HTTP 镜像站的大文件传输反复超时。
+RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i 's|http://mirrors.aliyun.com|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources; \
+    elif [ -f /etc/apt/sources.list ]; then \
+        sed -i 's|http://mirrors.aliyun.com|https://deb.debian.org|g' /etc/apt/sources.list; \
+    fi \
+    && apt-get update && apt-get install -y --no-install-recommends chromium fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 RUN npm install -g "pnpm@${DSH_PNPM_VERSION}" "@deepseek-ai/dsh@${DSH_VERSION}" \
     && dsh plugin --profile web add "dsh-univer-office@${DSH_UNIVER_OFFICE_VERSION}" \
     && dsh --version \
     && dsh --profile web --dump-config > /tmp/dsh-web-config.yml \
     && rm /tmp/dsh-web-config.yml
-
-COPY scripts/dsh-web.sh /usr/local/bin/dsh-web
-COPY scripts/dsh-chromium.sh /usr/local/bin/dsh-chromium
-RUN sed -i 's/\r$//' /usr/local/bin/dsh-web /usr/local/bin/dsh-chromium \
-    && chmod +x /usr/local/bin/dsh-web /usr/local/bin/dsh-chromium
 
 # opencode AI 编码助手 CLI
 RUN npm install -g opencode-ai \
@@ -166,7 +170,7 @@ RUN npm install -g opencode-ai \
 # ============================================================
 # Ceedling 嵌入式 C 测试框架（包含 Unity, CMock, CException）
 # ============================================================
-RUN gem install ceedling \
+RUN gem install ceedling --no-document \
     || echo "[WARN] ceedling install failed, skipping"
 
 # ============================================================
@@ -265,6 +269,21 @@ RUN if ! code-server --extensions-dir ${CODE_SERVER_EXTENSIONS_SEED} --list-exte
 # 配置和启动脚本
 # ============================================================
 USER root
+
+# 本地早期注入：与上游前端独立，启动时也适配已有 dsh-data 卷。
+COPY configs/browser-compat/ /opt/dsh-browser-compat/
+COPY scripts/dsh-web.sh /usr/local/bin/dsh-web
+COPY scripts/dsh-chromium.sh /usr/local/bin/dsh-chromium
+RUN sed -i 's/\r$//' /usr/local/bin/dsh-web /usr/local/bin/dsh-chromium \
+    && chmod +x /usr/local/bin/dsh-web /usr/local/bin/dsh-chromium
+RUN cd /opt/dsh-browser-compat \
+    && npm rebuild -g --allow-scripts=@deepseek-ai/dsh-subprocess-local,koffi,node-pty,protobufjs,opencode-ai \
+        @deepseek-ai/dsh-subprocess-local koffi node-pty protobufjs opencode-ai \
+    && npm install --no-package-lock --no-audit --no-fund \
+    && npm run build \
+    && npm test \
+    && rm -rf node_modules \
+    && node prepare-viewer.mjs /var/lib/dsh/profiles/web
 
 # VS Code 工作区默认设置
 COPY --chown=coder:coder configs/settings.json /home/coder/.local/share/code-server/User/settings.json

@@ -133,6 +133,7 @@ LITELLM_MASTER_KEY=sk-devenv
 # ---- 云端部署（可选）----
 # 若部署在云端，填写服务器公网 IP 或域名，gen_ssl 会将其加入证书 SAN
 # SERVER_DOMAIN=1.2.3.4
+# CODE_SERVER_PROXY_DOMAIN={{port}}.dev.example:8443
 EOF
 
     echo -e "${GREEN}✓ 配置文件已创建: $ENV_FILE${NC}"
@@ -170,6 +171,7 @@ gen_ssl() {
     local alt_names
     alt_names="DNS.1 = localhost
 DNS.2 = dev-server.local
+DNS.3 = 3080.localhost
 IP.1  = 127.0.0.1"
 
     if [ -n "$server_host" ]; then
@@ -179,9 +181,23 @@ IP.1  = 127.0.0.1"
 IP.2  = ${server_host}"
         else
             alt_names="${alt_names}
-DNS.3 = ${server_host}"
+DNS.4 = ${server_host}"
         fi
         echo -e "${BLUE}  SAN 包含云端地址: $server_host${NC}"
+    fi
+
+    if [ -f "$DOCKER_DIR/.env" ]; then
+        local forwarding_domain
+        forwarding_domain=$( (source "$DOCKER_DIR/.env"; printf '%s' "${CODE_SERVER_PROXY_DOMAIN:-}") )
+        if [ -n "$forwarding_domain" ]; then
+            if [[ "$forwarding_domain" != *'{{port}}'* ]]; then
+                forwarding_domain="{{port}}.${forwarding_domain}"
+            fi
+            forwarding_domain="${forwarding_domain//\{\{port\}\}/3080}"
+            forwarding_domain="${forwarding_domain%%:*}"
+            alt_names="${alt_names}
+DNS.5 = ${forwarding_domain}"
+        fi
     fi
 
     # 写入含 SAN 的 openssl 配置（浏览器 / Service Worker 需要 SAN，仅 CN 不够）
@@ -349,6 +365,8 @@ start_services_docker() {
         --network-alias vscode.local \
         -e "PASSWORD=${CODE_SERVER_PASSWORD:-changeme}" \
         -e "SUDO_PASSWORD=${SUDO_PASSWORD:-changeme}" \
+        -e "GATEWAY_PORT=${GATEWAY_PORT:-8443}" \
+        -e "CODE_SERVER_PROXY_DOMAIN=${CODE_SERVER_PROXY_DOMAIN:-}" \
         -v "$PROJECT_ROOT/workspace:/workspace" \
         -v "code-extensions:/home/coder/.local/share/code-server/extensions" \
         -v "code-config:/home/coder/.config/code-server" \

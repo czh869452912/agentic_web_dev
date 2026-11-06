@@ -48,6 +48,8 @@ __pycache__/
 
 # Node.js
 node_modules/
+**/node_modules/
+**/dist/
 npm-debug.log*
 
 # Docker

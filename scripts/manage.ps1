@@ -154,6 +154,7 @@ function Invoke-UpDocker {
     $pw           = if ($envVars["CODE_SERVER_PASSWORD"]) { $envVars["CODE_SERVER_PASSWORD"] } else { "changeme" }
     $sudoPw       = if ($envVars["SUDO_PASSWORD"])        { $envVars["SUDO_PASSWORD"] }        else { "changeme" }
     $gwPort       = if ($envVars["GATEWAY_PORT"])         { $envVars["GATEWAY_PORT"] }         else { "8443" }
+    $proxyDomain  = if ($envVars["CODE_SERVER_PROXY_DOMAIN"]) { $envVars["CODE_SERVER_PROXY_DOMAIN"] } else { "{{port}}.localhost:$gwPort" }
     $litellmKey   = if ($envVars["LITELLM_MASTER_KEY"])   { $envVars["LITELLM_MASTER_KEY"] }   else { "sk-devenv" }
     $internalBase = if ($envVars["INTERNAL_API_BASE"])    { $envVars["INTERNAL_API_BASE"] }    else { "" }
     $internalKey  = if ($envVars["INTERNAL_API_KEY"])     { $envVars["INTERNAL_API_KEY"] }     else { "" }
@@ -166,6 +167,7 @@ function Invoke-UpDocker {
     Invoke-DockerRunContainer -Name "code-server" -RunArgs @(
         "--hostname","code-server","--network-alias","vscode.local",
         "-e","PASSWORD=$pw","-e","SUDO_PASSWORD=$sudoPw",
+        "-e","GATEWAY_PORT=$gwPort","-e","CODE_SERVER_PROXY_DOMAIN=$proxyDomain",
         "-v","${ProjectRoot}\workspace:/workspace",
         "-v","code-extensions:/home/coder/.local/share/code-server/extensions",
         "-v","code-config:/home/coder/.config/code-server",
@@ -315,6 +317,7 @@ LITELLM_MASTER_KEY=sk-devenv
 
 # ---- 云端部署（可选）----
 # SERVER_DOMAIN=1.2.3.4
+# CODE_SERVER_PROXY_DOMAIN={{port}}.dev.example:8443
 "@ | Set-Content -Encoding UTF8 $EnvFile
     Write-OK "配置文件已创建 $EnvFile"
     Write-Warn "请编辑该文件配置 API 后再启动"
@@ -346,17 +349,26 @@ function Invoke-GenSSL {
     $altNames = @"
 DNS.1 = localhost
 DNS.2 = dev-server.local
+DNS.3 = 3080.localhost
 IP.1  = 127.0.0.1
 "@
     $cnName = "localhost"
     if ($ServerHost) {
         $cnName = $ServerHost
         if ($ServerHost -match '^\d+\.\d+\.\d+\.\d+$') {
-            $altNames += "IP.2  = $ServerHost`n"
+            $altNames += "`nIP.2  = $ServerHost`n"
         } else {
-            $altNames += "DNS.3 = $ServerHost`n"
+            $altNames += "`nDNS.4 = $ServerHost`n"
         }
         Write-Info "  SAN 包含云端地址: $ServerHost"
+    }
+
+    $sslEnv = Read-EnvFile
+    if ($sslEnv["CODE_SERVER_PROXY_DOMAIN"]) {
+        $sslProxyDomain = $sslEnv["CODE_SERVER_PROXY_DOMAIN"]
+        if (-not $sslProxyDomain.Contains("{{port}}")) { $sslProxyDomain = "{{port}}.$sslProxyDomain" }
+        $forwardHost = ([uri]("https://" + $sslProxyDomain.Replace("{{port}}", "3080"))).DnsSafeHost
+        $altNames += "`nDNS.5 = $forwardHost`n"
     }
 
     $opensslCmd = $null
@@ -408,7 +420,8 @@ $altNames
         Write-OK "SSL 证书已生成到 $sslDir"
     } else {
         Write-Warn "未找到 openssl，使用 PowerShell New-SelfSignedCertificate..."
-        $dnsNames = @("localhost","dev-server.local")
+        $dnsNames = @("localhost","dev-server.local","3080.localhost")
+        if ($forwardHost) { $dnsNames += $forwardHost }
         if ($ServerHost -and ($ServerHost -notmatch '^\d+')) { $dnsNames += $ServerHost }
         $cert = New-SelfSignedCertificate `
             -DnsName $dnsNames `

@@ -1,0 +1,3 @@
+- insert:
+    - id: browser-compat
+      name: /opt/dsh-browser-compat/host.mjs
